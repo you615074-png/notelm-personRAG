@@ -9,7 +9,12 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 @router.post("", response_model=ChatResponse)
 async def chat(body: ChatRequest):
-    result = await generate_answer(body.notebook_id, body.message, body.top_k)
+    result = await generate_answer(
+        body.notebook_id,
+        body.message,
+        body.top_k,
+        body.chat_history,
+    )
     citations = [
         ChatCitation(
             index=c["index"],
@@ -26,8 +31,13 @@ async def chat(body: ChatRequest):
 async def chat_stream(body: ChatRequest):
     async def event_generator():
         try:
-            async for token in generate_answer_stream(body.notebook_id, body.message, body.top_k):
-                yield f"data: {json.dumps({'token': token})}\n\n"
+            async for chunk in generate_answer_stream(
+                body.notebook_id,
+                body.message,
+                body.top_k,
+                body.chat_history,
+            ):
+                yield f"data: {chunk}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"

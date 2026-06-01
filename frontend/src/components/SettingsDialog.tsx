@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import { api } from "@/lib/api"
+import { useToast } from "./Toast"
 
 interface Props {
   onClose: () => void
@@ -13,6 +15,9 @@ export default function SettingsDialog({ onClose }: Props) {
   const [embedUrl, setEmbedUrl] = useState(localStorage.getItem("embed_base_url") || "")
   const [embedKey, setEmbedKey] = useState(localStorage.getItem("embed_api_key") || "")
   const [embedModel, setEmbedModel] = useState(localStorage.getItem("embed_model") || "text-embedding-3-small")
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<string | null>(null)
+  const { toast } = useToast()
 
   function save() {
     localStorage.setItem("llm_base_url", llmUrl)
@@ -21,13 +26,41 @@ export default function SettingsDialog({ onClose }: Props) {
     localStorage.setItem("embed_base_url", embedUrl)
     localStorage.setItem("embed_api_key", embedKey)
     localStorage.setItem("embed_model", embedModel)
+    toast("设置已保存", "success")
     onClose()
+  }
+
+  async function testConnection() {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const result = await api.health.check()
+      const parts: string[] = []
+      parts.push(`✓ 后端服务: ${result.status}`)
+
+      if (result.llm.ok) {
+        parts.push(`✓ LLM: ${result.llm.message}`)
+      } else {
+        parts.push(`✗ LLM: ${result.llm.error || result.llm.message}`)
+      }
+
+      if (result.embedding.ok) {
+        parts.push(`✓ 向量化: ${result.embedding.message}`)
+      } else {
+        parts.push(`✗ 向量化: ${result.embedding.error || result.embedding.message}`)
+      }
+
+      setTestResult(parts.join("\n"))
+    } catch (e: unknown) {
+      setTestResult(`✗ 无法连接到后端服务: ${(e as Error).message}`)
+    }
+    setTesting(false)
   }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={onClose}>
       <div
-        className="bg-surface-canvas shadow-2xl w-[480px] max-h-[80vh] overflow-y-auto"
+        className="bg-surface-canvas shadow-2xl w-[480px] max-h-[85vh] overflow-y-auto"
         style={{ borderRadius: 18 }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -82,11 +115,22 @@ export default function SettingsDialog({ onClose }: Props) {
               </div>
             </div>
           </fieldset>
+
+          {testResult && (
+            <div className="p-3 border border-hairline animate-fade-in" style={{ borderRadius: 12, background: testResult.includes("✗") ? "rgba(255,59,48,0.05)" : "rgba(52,199,89,0.05)" }}>
+              <pre className="text-apple-fine text-ink-secondary whitespace-pre-line">{testResult}</pre>
+            </div>
+          )}
         </div>
 
-        <div className="px-6 py-4 border-t border-hairline flex justify-end gap-2">
-          <button onClick={onClose} className="btn-outline">取消</button>
-          <button onClick={save} className="btn-primary">保存</button>
+        <div className="px-6 py-4 border-t border-hairline flex justify-between gap-2">
+          <button onClick={testConnection} disabled={testing} className="btn-outline text-apple-caption">
+            {testing ? "测试中…" : "测试连接"}
+          </button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="btn-ghost text-apple-caption">取消</button>
+            <button onClick={save} className="btn-primary text-apple-caption !px-6 !py-2">保存</button>
+          </div>
         </div>
       </div>
     </div>

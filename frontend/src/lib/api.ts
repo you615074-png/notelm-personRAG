@@ -1,4 +1,4 @@
-import type { Notebook, Document, ChatResponse, Citation } from "@/types"
+import type { Notebook, Document, ChatResponse, Citation, Note } from "@/types"
 
 const BASE = "/api"
 
@@ -12,6 +12,24 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     throw new Error(err.detail || `HTTP ${res.status}`)
   }
   return res.json()
+}
+
+function getSettingsHeaders() {
+  const headers: Record<string, string> = {}
+  const llmUrl = localStorage.getItem("llm_base_url")
+  const llmKey = localStorage.getItem("llm_api_key")
+  const llmModel = localStorage.getItem("llm_model")
+  const embedUrl = localStorage.getItem("embed_base_url")
+  const embedKey = localStorage.getItem("embed_api_key")
+  const embedModel = localStorage.getItem("embed_model")
+
+  if (llmUrl) headers["X-LLM-Base-URL"] = llmUrl
+  if (llmKey) headers["X-LLM-API-Key"] = llmKey
+  if (llmModel) headers["X-LLM-Model"] = llmModel
+  if (embedUrl) headers["X-Embed-Base-URL"] = embedUrl
+  if (embedKey) headers["X-Embed-API-Key"] = embedKey
+  if (embedModel) headers["X-Embed-Model"] = embedModel
+  return headers
 }
 
 export const api = {
@@ -55,27 +73,34 @@ export const api = {
       request<void>(`/documents/${notebookId}/${docId}`, {
         method: "DELETE",
       }),
+    content: (notebookId: string, docId: string) =>
+      request<{ content: string }>(`/documents/${notebookId}/${docId}/content`),
   },
 
   chat: {
-    send: (notebookId: string, message: string, topK?: number) =>
+    send: (notebookId: string, message: string, topK?: number, chatHistory?: { role: string; content: string }[]) =>
       request<ChatResponse>("/chat", {
         method: "POST",
-        body: JSON.stringify({ notebook_id: notebookId, message, top_k: topK }),
+        body: JSON.stringify({ notebook_id: notebookId, message, top_k: topK, chat_history: chatHistory }),
       }),
 
     stream: (
       notebookId: string,
       message: string,
       onToken: (token: string) => void,
+      onCitations: (citations: Citation[]) => void,
       onDone: () => void,
       onError: (err: Error) => void,
+      chatHistory?: { role: string; content: string }[],
       topK?: number,
     ) => {
       fetch(`${BASE}/chat/stream`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notebook_id: notebookId, message, top_k: topK }),
+        headers: {
+          "Content-Type": "application/json",
+          ...getSettingsHeaders(),
+        },
+        body: JSON.stringify({ notebook_id: notebookId, message, top_k: topK, chat_history: chatHistory }),
       })
         .then(async (res) => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -98,7 +123,16 @@ export const api = {
                 }
                 try {
                   const parsed = JSON.parse(data)
-                  if (parsed.token) onToken(parsed.token)
+                  if (parsed.token !== undefined) {
+                    onToken(parsed.token)
+                  }
+                  if (parsed.citations !== undefined) {
+                    onCitations(parsed.citations)
+                  }
+                  if (parsed.error) {
+                    onError(new Error(parsed.error))
+                    return
+                  }
                 } catch {
                   // skip unparseable chunks
                 }
@@ -109,5 +143,30 @@ export const api = {
         })
         .catch((err) => onError(err))
     },
+  },
+
+  notes: {
+    list: (notebookId: string) => request<Note[]>(`/notes/${notebookId}`),
+    create: (notebookId: string, title: string, content: string) =>
+      request<Note>("/notes", {
+        method: "POST",
+        body: JSON.stringify({ notebook_id: notebookId, title, content }),
+      }),
+    update: (noteId: string, notebookId: string, title: string, content: string) =>
+      request<Note>(`/notes/${noteId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ notebook_id: notebookId, title, content }),
+      }),
+    delete: (notebookId: string, noteId: string) =>
+      request<void>(`/notes/${notebookId}/${noteId}`, { method: "DELETE" }),
+  },
+
+  health: {
+    check: () => request<{
+      status: string
+      version: string
+      embedding: { ok: boolean; mode: string; model: string; message: string; error?: string }
+      llm: { ok: boolean; model: string; message: string; error?: string }
+    }>("/health"),
   },
 }

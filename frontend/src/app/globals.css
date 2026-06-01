@@ -18,6 +18,93 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+.dark, [data-theme="dark"] {
+  color: #f5f5f7;
+  background: #1c1c1e;
+}
+
+.dark body, [data-theme="dark"] body {
+  color: #f5f5f7;
+  background: #1c1c1e;
+}
+
+.dark .bg-surface-canvas, [data-theme="dark"] .bg-surface-canvas {
+  background: #1c1c1e;
+}
+.dark .bg-surface-parchment, [data-theme="dark"] .bg-surface-parchment {
+  background: #2c2c2e;
+}
+.dark .bg-surface-pearl, [data-theme="dark"] .bg-surface-pearl {
+  background: #1c1c1e;
+}
+.dark .bg-white, [data-theme="dark"] .bg-white {
+  background: #2c2c2e;
+}
+
+.dark .text-ink, [data-theme="dark"] .text-ink {
+  color: #f5f5f7;
+}
+.dark .text-ink-secondary, [data-theme="dark"] .text-ink-secondary {
+  color: #98989d;
+}
+
+.dark .border-hairline, [data-theme="dark"] .border-hairline {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.dark .border-hairline-soft, [data-theme="dark"] .border-hairline-soft {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.dark .card, [data-theme="dark"] .card {
+  background: #2c2c2e;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark .input-field, [data-theme="dark"] .input-field {
+  background: #3a3a3c;
+  color: #f5f5f7;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.dark .input-field:focus, [data-theme="dark"] .input-field:focus {
+  border-color: #2997ff;
+  box-shadow: 0 0 0 3px rgba(41, 151, 255, 0.2);
+}
+.dark .input-field::placeholder, [data-theme="dark"] .input-field::placeholder {
+  color: #636366;
+}
+
+.dark .btn-primary, [data-theme="dark"] .btn-primary {
+  background: #2997ff;
+}
+.dark .btn-primary:hover, [data-theme="dark"] .btn-primary:hover {
+  background: #40a9ff;
+}
+
+.dark .btn-outline, [data-theme="dark"] .btn-outline {
+  border-color: #2997ff;
+  color: #2997ff;
+}
+.dark .btn-outline:hover, [data-theme="dark"] .btn-outline:hover {
+  background: rgba(41, 151, 255, 0.1);
+}
+
+.dark .btn-ghost:hover, [data-theme="dark"] .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dark .pill-tab-active, [data-theme="dark"] .pill-tab-active {
+  background: #e5e5ea;
+  color: #1c1c1e;
+  border-color: #e5e5ea;
+}
+
+.dark ::-webkit-scrollbar-thumb, [data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #48484a;
+}
+.dark ::-webkit-scrollbar-thumb:hover, [data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #636366;
+}
+
 #__next, .app-root {
   height: 100%;
 }
@@ -137,4 +224,28 @@ html, body {
     @apply bg-ink-muted text-white;
     border-color: #333333;
   }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}
+.animate-bounce {
+  animation: bounce 1.4s infinite ease-in-out both;
 }

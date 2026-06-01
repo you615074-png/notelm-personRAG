@@ -15,7 +15,7 @@ from app.models.schemas import (
 from app.config import get_settings
 from app.database import delete_collection
 
-router = APIRouter(prefix="/api/notebooks", tags=["notebooks"])
+router = APIRouter(prefix="/api", tags=["notebooks"])
 
 settings = get_settings()
 
@@ -52,11 +52,25 @@ def _save_doc_meta(meta: dict):
         json.dump(meta, f, indent=2, ensure_ascii=False)
 
 
+def _load_notes(notebook_id: str) -> list[dict]:
+    notes_file = os.path.join(NOTES_DIR, f"{notebook_id}.json")
+    if not os.path.exists(notes_file):
+        return []
+    with open(notes_file, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _save_notes(notebook_id: str, notes: list[dict]):
+    notes_file = os.path.join(NOTES_DIR, f"{notebook_id}.json")
+    with open(notes_file, "w", encoding="utf-8") as f:
+        json.dump(notes, f, indent=2, ensure_ascii=False)
+
+
 def _now():
     return datetime.now(timezone.utc).isoformat()
 
 
-@router.get("", response_model=list[NotebookResponse])
+@router.get("/notebooks", response_model=list[NotebookResponse])
 async def list_notebooks():
     meta = _load_meta()
     notebooks = []
@@ -73,7 +87,7 @@ async def list_notebooks():
     return notebooks
 
 
-@router.post("", response_model=NotebookResponse)
+@router.post("/notebooks", response_model=NotebookResponse)
 async def create_notebook(body: NotebookCreate):
     nb_id = str(uuid.uuid4())
     now = _now()
@@ -83,7 +97,7 @@ async def create_notebook(body: NotebookCreate):
     return NotebookResponse(id=nb_id, name=body.name, created_at=now, updated_at=now)
 
 
-@router.get("/{notebook_id}", response_model=NotebookResponse)
+@router.get("/notebooks/{notebook_id}", response_model=NotebookResponse)
 async def get_notebook(notebook_id: str):
     meta = _load_meta()
     if notebook_id not in meta:
@@ -97,7 +111,7 @@ async def get_notebook(notebook_id: str):
     )
 
 
-@router.patch("/{notebook_id}", response_model=NotebookResponse)
+@router.patch("/notebooks/{notebook_id}", response_model=NotebookResponse)
 async def update_notebook(notebook_id: str, body: NotebookUpdate):
     meta = _load_meta()
     if notebook_id not in meta:
@@ -115,7 +129,7 @@ async def update_notebook(notebook_id: str, body: NotebookUpdate):
     )
 
 
-@router.delete("/{notebook_id}")
+@router.delete("/notebooks/{notebook_id}")
 async def delete_notebook(notebook_id: str):
     meta = _load_meta()
     if notebook_id not in meta:
@@ -135,8 +149,54 @@ async def delete_notebook(notebook_id: str):
             removed_count += 1
     _save_doc_meta(doc_meta)
 
-    notes_pattern = os.path.join(NOTES_DIR, f"{notebook_id}*.json")
-    for note_file in glob.glob(notes_pattern):
-        os.remove(note_file)
+    notes_file = os.path.join(NOTES_DIR, f"{notebook_id}.json")
+    if os.path.exists(notes_file):
+        os.remove(notes_file)
 
     return {"ok": True, "removed_documents": removed_count}
+
+
+@router.get("/notes/{notebook_id}", response_model=list[NoteResponse])
+async def list_notes(notebook_id: str):
+    notes = _load_notes(notebook_id)
+    return [NoteResponse(**n) for n in notes]
+
+
+@router.post("/notes", response_model=NoteResponse)
+async def create_note(body: NoteCreate):
+    note_id = str(uuid.uuid4())
+    now = _now()
+    note_data = {
+        "id": note_id,
+        "notebook_id": body.notebook_id,
+        "title": body.title or "Untitled",
+        "content": body.content,
+        "created_at": now,
+        "updated_at": now,
+    }
+    notes = _load_notes(body.notebook_id)
+    notes.insert(0, note_data)
+    _save_notes(body.notebook_id, notes)
+    return NoteResponse(**note_data)
+
+
+@router.patch("/notes/{note_id}", response_model=NoteResponse)
+async def update_note(note_id: str, body: NoteCreate):
+    notebook_id = body.notebook_id
+    notes = _load_notes(notebook_id)
+    for i, n in enumerate(notes):
+        if n["id"] == note_id:
+            notes[i]["title"] = body.title or n.get("title", "Untitled")
+            notes[i]["content"] = body.content
+            notes[i]["updated_at"] = _now()
+            _save_notes(notebook_id, notes)
+            return NoteResponse(**notes[i])
+    raise HTTPException(status_code=404, detail="Note not found")
+
+
+@router.delete("/notes/{notebook_id}/{note_id}")
+async def delete_note(notebook_id: str, note_id: str):
+    notes = _load_notes(notebook_id)
+    notes = [n for n in notes if n["id"] != note_id]
+    _save_notes(notebook_id, notes)
+    return {"ok": True}

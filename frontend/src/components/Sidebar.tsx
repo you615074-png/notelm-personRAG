@@ -6,11 +6,15 @@ import { useEffect, useState } from "react"
 import type { Notebook } from "@/types"
 import { api } from "@/lib/api"
 import SettingsDialog from "./SettingsDialog"
+import { useTheme } from "./ThemeProvider"
+import { useToast } from "./Toast"
 
 export default function Sidebar() {
   const pathname = usePathname()
   const [notebooks, setNotebooks] = useState<Notebook[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const { dark, toggle: toggleTheme } = useTheme()
+  const { toast } = useToast()
 
   const load = () => {
     api.notebooks.list().then(setNotebooks).catch(() => {})
@@ -18,14 +22,21 @@ export default function Sidebar() {
 
   useEffect(() => { load() }, [])
 
+  useEffect(() => {
+    const handleFocus = () => load()
+    window.addEventListener("focus", handleFocus)
+    return () => window.removeEventListener("focus", handleFocus)
+  }, [])
+
   async function create() {
     const name = window.prompt("笔记本名称：")
     if (!name?.trim()) return
     try {
       await api.notebooks.create(name.trim())
       load()
+      toast(`笔记本 "${name.trim()}" 已创建`, "success")
     } catch (e: unknown) {
-      alert((e as Error).message)
+      toast((e as Error).message, "error")
     }
   }
 
@@ -78,7 +89,26 @@ export default function Sidebar() {
         )}
       </nav>
 
-      <div className="p-3 border-t border-hairline">
+      <div className="p-3 border-t border-hairline space-y-1">
+        <button
+          onClick={toggleTheme}
+          className="w-full flex items-center gap-2 px-3 py-2 text-apple-caption text-ink-secondary hover:bg-hairline-soft transition-colors"
+          style={{ borderRadius: 8 }}
+        >
+          {dark ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="5" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"
+                stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"
+                stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+          {dark ? "浅色模式" : "深色模式"}
+        </button>
         <button
           onClick={() => setSettingsOpen(true)}
           className="w-full flex items-center gap-2 px-3 py-2 text-apple-caption text-ink-secondary hover:bg-hairline-soft transition-colors"

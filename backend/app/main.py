@@ -1,4 +1,5 @@
 import os
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -6,7 +7,10 @@ from fastapi.responses import FileResponse
 from app.routers import notebooks, documents, chat
 from app.config import get_settings
 
-app = FastAPI(title="Notelm API", version="0.1.0")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(title="Notelm API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,6 +27,19 @@ app.include_router(chat.router)
 
 @app.get("/api/health")
 async def health():
+    from app.services.embedder import test_embedding_connection, test_llm_connection
+    embed_status = test_embedding_connection()
+    llm_status = test_llm_connection()
+    return {
+        "status": "ok",
+        "version": "1.0.0",
+        "embedding": embed_status,
+        "llm": llm_status,
+    }
+
+
+@app.get("/api/health/simple")
+async def health_simple():
     return {"status": "ok"}
 
 

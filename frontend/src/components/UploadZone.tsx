@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react"
 import { api } from "@/lib/api"
+import { useToast } from "./Toast"
 
 interface Props {
   notebookId: string
@@ -14,14 +15,16 @@ export default function UploadZone({ notebookId, onUploaded }: Props) {
   const [urlMode, setUrlMode] = useState(false)
   const [url, setUrl] = useState("")
   const fileRef = useRef<HTMLInputElement>(null)
+  const { toast } = useToast()
 
   async function handleFile(file: File) {
     setUploading(true)
     try {
       await api.documents.upload(notebookId, file)
+      toast(`"${file.name}" 上传成功`, "success")
       onUploaded()
     } catch (e: unknown) {
-      alert("上传失败：" + (e as Error).message)
+      toast("上传失败：" + (e as Error).message, "error")
     }
     setUploading(false)
   }
@@ -31,11 +34,12 @@ export default function UploadZone({ notebookId, onUploaded }: Props) {
     setUploading(true)
     try {
       await api.documents.fetchUrl(notebookId, url.trim())
+      toast("网页抓取成功", "success")
       setUrl("")
       setUrlMode(false)
       onUploaded()
     } catch (e: unknown) {
-      alert("抓取失败：" + (e as Error).message)
+      toast("抓取失败：" + (e as Error).message, "error")
     }
     setUploading(false)
   }

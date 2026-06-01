@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import type { ChatMessage } from "@/types"
+import type { ChatMessage, Citation } from "@/types"
 import { api } from "@/lib/api"
 import NoteEditor from "./NoteEditor"
 
@@ -33,14 +33,24 @@ function clearMessages(notebookId: string) {
   } catch { }
 }
 
+function getChatHistoryForAPI(msgs: ChatMessage[], currentMsgId: string): { role: string; content: string }[] {
+  return msgs
+    .filter(m => m.id !== currentMsgId)
+    .slice(-12)
+    .map(m => ({
+      role: m.role,
+      content: m.content,
+    }))
+}
+
 function MessageBubble({ msg }: { msg: ChatMessage }) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
 
   const renderContent = (content: string) => {
-    if (!msg.citations?.length) return <span>{content}</span>
+    if (!msg.citations?.length) return <span className="whitespace-pre-wrap">{content}</span>
     const parts = content.split(/(\[\d+\])/g)
     return (
-      <span>
+      <span className="whitespace-pre-wrap">
         {parts.map((part, i) => {
           const m = part.match(/^\[(\d+)\]$/)
           if (!m) return <span key={i}>{part}</span>
@@ -50,7 +60,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
           return (
             <span key={i} className="relative inline">
               <sup
-                className="text-primary-on-dark cursor-pointer font-semibold text-[10px]"
+                className="cursor-pointer font-semibold text-[10px]"
                 style={{ color: "#2997ff" }}
                 onMouseEnter={() => setHoveredIdx(idx)}
                 onMouseLeave={() => setHoveredIdx(null)}
@@ -84,6 +94,17 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
         style={{ borderRadius: msg.role === "user" ? "18px 18px 5px 18px" : "18px 18px 18px 5px" }}
       >
         {msg.role === "user" ? msg.content : renderContent(msg.content)}
+        {msg.citations && msg.citations.length > 0 && msg.role === "assistant" && (
+          <div className="mt-2 pt-2 border-t border-hairline-soft">
+            <div className="text-apple-fine text-ink-secondary font-semibold mb-1">信息来源</div>
+            {msg.citations.map((c, i) => (
+              <div key={i} className="text-apple-fine text-ink-secondary mb-0.5">
+                <span className="font-semibold" style={{ color: "#2997ff" }}>[{c.index}]</span>{" "}
+                {c.source}{c.page ? ` p.${c.page}` : ""}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -95,8 +116,10 @@ export default function ChatPanel({ notebookId }: Props) {
   const [loading, setLoading] = useState(false)
   const [noteContent, setNoteContent] = useState("")
   const [showNoteEditor, setShowNoteEditor] = useState(false)
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const pendingCitationsRef = useRef<Citation[]>([])
 
   const scrollDown = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -115,27 +138,50 @@ export default function ChatPanel({ notebookId }: Props) {
       content: text,
       timestamp: new Date().toISOString(),
     }
-    setMessages((prev) => {
-      const next = [...prev, userMsg]
-      saveMessages(notebookId, next)
-      return next
-    })
+    const updatedMessages = [...messages, userMsg]
+    setMessages(updatedMessages)
+    saveMessages(notebookId, updatedMessages)
     setLoading(true)
 
     const assistantId = (Date.now() + 1).toString()
-    setMessages((prev) => [
-      ...prev,
-      { id: assistantId, role: "assistant", content: "", timestamp: new Date().toISOString(), citations: [] },
-    ])
+    const assistantMsg: ChatMessage = {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date().toISOString(),
+      citations: [],
+    }
+    setMessages(prev => [...prev, assistantMsg])
+    pendingCitationsRef.current = []
+
+    const chatHistory = getChatHistoryForAPI(updatedMessages, "")
 
     api.chat.stream(
       notebookId, text,
-      (token) => setMessages((prev) =>
-        prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + token } : m))
-      ),
+      (data) => {
+        if (typeof data === "string") {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + data } : m))
+          )
+        }
+      },
+      (citations) => {
+        pendingCitationsRef.current = citations
+        setMessages((prev) =>
+          prev.map((m) => (m.id === assistantId ? { ...m, citations } : m))
+        )
+      },
       () => {
         setLoading(false)
-        setMessages((prev) => { saveMessages(notebookId, prev); return prev })
+        setMessages((prev) => {
+          const final = prev.map((m) =>
+            m.id === assistantId && pendingCitationsRef.current.length > 0
+              ? { ...m, citations: pendingCitationsRef.current }
+              : m
+          )
+          saveMessages(notebookId, final)
+          return final
+        })
       },
       (err) => {
         setMessages((prev) => {
@@ -147,12 +193,17 @@ export default function ChatPanel({ notebookId }: Props) {
         })
         setLoading(false)
       },
+      chatHistory,
     )
   }
 
   function handleClear() {
+    setShowClearConfirm(true)
+  }
+  function confirmClear() {
     setMessages([])
     clearMessages(notebookId)
+    setShowClearConfirm(false)
   }
 
   function saveToNote(msg: ChatMessage) {
@@ -160,12 +211,19 @@ export default function ChatPanel({ notebookId }: Props) {
     setShowNoteEditor(true)
   }
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      send()
+    }
+  }
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="px-6 py-3 border-b border-hairline flex items-center justify-between">
         <h3 className="text-apple-caption font-semibold text-ink">对话</h3>
         {messages.length > 0 && (
-          <button onClick={handleClear} className="text-apple-fine text-ink-secondary hover:text-ink btn-ghost">
+          <button onClick={handleClear} className="text-apple-fine text-ink-secondary hover:text-red-500 btn-ghost">
             清空
           </button>
         )}
@@ -210,8 +268,8 @@ export default function ChatPanel({ notebookId }: Props) {
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
-            placeholder="基于你的源文档提问…"
+            onKeyDown={handleKeyDown}
+            placeholder="基于你的源文档提问… (Enter 发送)"
             className="input-field flex-1 text-apple-caption"
             disabled={loading}
           />
@@ -222,6 +280,19 @@ export default function ChatPanel({ notebookId }: Props) {
           </button>
         </div>
       </div>
+
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={() => setShowClearConfirm(false)}>
+          <div className="bg-surface-canvas shadow-2xl w-80 p-6 animate-fade-in" style={{ borderRadius: 18 }} onClick={e => e.stopPropagation()}>
+            <h3 className="text-apple-body-strong text-ink mb-2">清空对话？</h3>
+            <p className="text-apple-caption text-ink-secondary mb-4">当前笔记本的所有对话历史将被删除，此操作不可撤销。</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowClearConfirm(false)} className="btn-outline text-apple-caption">取消</button>
+              <button onClick={confirmClear} className="btn-sm bg-red-500">确认清空</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showNoteEditor && (
         <NoteEditor notebookId={notebookId} initialContent={noteContent} onClose={() => setShowNoteEditor(false)} />

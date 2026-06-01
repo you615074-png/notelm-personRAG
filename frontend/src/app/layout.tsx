@@ -1,6 +1,8 @@
 import type { Metadata } from "next"
 import "./globals.css"
 import Sidebar from "@/components/Sidebar"
+import { ToastProvider } from "@/components/Toast"
+import { ThemeProvider } from "@/components/ThemeProvider"
 
 export const metadata: Metadata = {
   title: "Notelm — Personal RAG Notebook",
@@ -11,10 +13,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <div className="app-root flex h-full">
-          <Sidebar />
-          <main className="flex-1 min-w-0">{children}</main>
-        </div>
+        <ThemeProvider>
+          <ToastProvider>
+            <div className="app-root flex h-full">
+              <Sidebar />
+              <main className="flex-1 min-w-0">{children}</main>
+            </div>
+          </ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

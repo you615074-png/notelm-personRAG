@@ -3,6 +3,7 @@
 import type { Document } from "@/types"
 import UploadZone from "./UploadZone"
 import { api } from "@/lib/api"
+import { useToast } from "./Toast"
 
 interface Props {
   notebookId: string
@@ -12,9 +13,12 @@ interface Props {
 }
 
 export default function SourcePanel({ notebookId, documents, onRefresh, onSelectDoc }: Props) {
-  async function remove(id: string) {
-    if (!confirm("确定删除该源文档？")) return
+  const { toast } = useToast()
+
+  async function remove(id: string, filename: string) {
+    if (!confirm(`确定删除 "${filename}"？`)) return
     await api.documents.delete(notebookId, id)
+    toast(`已删除 "${filename}"`, "info")
     onRefresh()
   }
 
@@ -50,7 +54,7 @@ export default function SourcePanel({ notebookId, documents, onRefresh, onSelect
               <div className="text-apple-fine text-ink-secondary">{doc.chunk_count} 分块</div>
             </div>
             <button
-              onClick={(e) => { e.stopPropagation(); remove(doc.id) }}
+              onClick={(e) => { e.stopPropagation(); remove(doc.id, doc.filename) }}
               className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 rounded transition-all"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none">

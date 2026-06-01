@@ -57,6 +57,12 @@ async def upload_document(notebook_id: str, file: UploadFile = File(...)):
     if file_type is None:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.filename}")
 
+    if file.filename:
+        meta = _load_meta()
+        for doc_id, doc in meta.items():
+            if doc.get("notebook_id") == notebook_id and doc.get("filename") == file.filename:
+                raise HTTPException(status_code=409, detail=f"Document '{file.filename}' already exists in this notebook")
+
     filepath = await save_upload(file)
     text = await parse_file(filepath, file.filename)
     chunks = chunk_text(text, file_type)
@@ -103,6 +109,11 @@ async def upload_document(notebook_id: str, file: UploadFile = File(...)):
 
 @router.post("/fetch-url", response_model=DocumentResponse)
 async def fetch_url(body: WebFetchRequest):
+    meta = _load_meta()
+    for doc_id, doc in meta.items():
+        if doc.get("notebook_id") == body.notebook_id and doc.get("url") == body.url:
+            raise HTTPException(status_code=409, detail="This URL has already been fetched in this notebook")
+
     result = await fetch_url_content(body.url)
     filepath = result["filepath"]
     title = result["title"]
@@ -157,6 +168,24 @@ async def delete_document(notebook_id: str, doc_id: str):
     delete_document_chunks(notebook_id, doc_id)
     meta = _load_meta()
     if doc_id in meta:
+        if "filepath" in meta[doc_id] and os.path.exists(meta[doc_id]["filepath"]):
+            os.remove(meta[doc_id]["filepath"])
         del meta[doc_id]
         _save_meta(meta)
     return {"ok": True}
+
+
+@router.get("/{notebook_id}/{doc_id}/content")
+async def get_document_content(notebook_id: str, doc_id: str):
+    meta = _load_meta()
+    if doc_id not in meta:
+        raise HTTPException(status_code=404, detail="Document not found")
+    doc = meta[doc_id]
+    filepath = doc.get("filepath", "")
+    if not filepath or not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Document file not found")
+    try:
+        text = await parse_file(filepath, doc.get("filename", filepath))
+        return {"content": text[:10000]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read document: {str(e)}")

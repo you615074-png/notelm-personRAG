@@ -31,6 +31,7 @@ class ChatRequest(BaseModel):
     notebook_id: str
     message: str = Field(..., min_length=1)
     top_k: Optional[int] = None
+    chat_history: Optional[list[dict]] = None
 
 
 class ChatCitation(BaseModel):

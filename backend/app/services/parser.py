@@ -71,11 +71,18 @@ def parse_pdf(filepath: str) -> str:
     import fitz
     doc = fitz.open(filepath)
     pages = []
+    total_text = ""
     for page in doc:
         text = page.get_text()
         if text.strip():
             pages.append(f"[Page {page.number + 1}]\n{text.strip()}")
+            total_text += text.strip()
     doc.close()
+    if not total_text:
+        raise ValueError(
+            "This PDF appears to be a scanned document (image-based) with no embedded text layer. "
+            "Please use an OCR tool (e.g., Adobe Acrobat, Tesseract) to convert it to a searchable PDF first."
+        )
     return "\n\n".join(pages)
 
 
@@ -127,10 +134,16 @@ def parse_csv(filepath: str) -> str:
     rows = []
     with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
         reader = csv.reader(f)
-        headers = next(reader)
+        try:
+            headers = next(reader)
+        except StopIteration:
+            return ""
         rows.append(" | ".join(headers))
         rows.append(" | ".join(["---"] * len(headers)))
-        for row in reader:
+        for i, row in enumerate(reader):
+            if i >= 5000:
+                rows.append(f"\n[Note: CSV truncated after 5000 rows, {i - 5000} remaining rows omitted]")
+                break
             rows.append(" | ".join(row))
     return "\n".join(rows)
 
