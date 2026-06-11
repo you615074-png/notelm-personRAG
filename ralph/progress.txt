@@ -143,3 +143,29 @@ Started: Thu Jun 11 14:16:16     2026
   - Smart truncation at word boundary uses `str.rfind(" ")` within the first `max_chars` characters
   - The title generation is idempotent — if conversation metadata already exists, no new title is generated
 ---
+
+## 2026-06-11 ~17:30 UTC - US-010
+- Added tag API methods in `frontend/src/lib/api.ts`:
+  - Updated `notebooks.update()` to accept `{ name?, tags? }` instead of just name string
+  - Added `tags.list()` calling `GET /api/tags` for autocomplete
+  - Added `tags.delete(name)` calling `DELETE /api/tags/{name}` for future tag management
+- Rewrote `frontend/src/components/Sidebar.tsx` with full tag management UI:
+  - Tag chips rendered below each notebook name with deterministic colors (hash-based, 8 palettes with dark mode support)
+  - Inline tag input per notebook with autocomplete dropdown from existing tags
+  - Keyboard navigation (ArrowDown/Up, Enter, Escape) on tag input
+  - Clicking a tag chip filters sidebar to notebooks containing that tag
+  - Filter bar showing active tag + count + clear (x) button
+  - Clicking the active filter tag again clears the filter
+  - Empty state: "没有笔记本包含标签" with "显示全部笔记本" button
+  - Remove tag button (x) on each chip with stopPropagation
+  - Add tag button (+) at end of each notebook's chip row
+- Updated `frontend/src/app/notebook/[id]/page.tsx` to use new `api.notebooks.update(id, { name })` signature
+- Files changed: `frontend/src/lib/api.ts`, `frontend/src/components/Sidebar.tsx`, `frontend/src/app/notebook/[id]/page.tsx`
+- **Learnings for future iterations:**
+  - When autocomplete calls `setState` + function that reads same state, pass the value explicitly to avoid stale closure — React batches state updates asynchronously
+  - The `api.notebooks.update()` now uses an object parameter `{ name?, tags? }` — all callers must be updated to pass `{ name: ... }` instead of bare string
+  - Tag colors use a deterministic hash (`((hash << 5) - hash + charCode) | 0`) to ensure the same tag always gets the same color across renders
+  - CSS approach: use `dark:` Tailwind variants for dark mode — arbitrary hex values like `dark:bg-[#3a3a3c]` work but prefer semantic tokens like `bg-surface-canvas` when available
+  - The `tags` API namespace is separate from `notebooks` — tags have their own `GET /api/tags` list and `DELETE /api/tags/{name}` bulk-delete endpoints
+  - Sidebar state for tags is local to Sidebar component (no global store) — consistent with existing pattern; window focus event triggers reload
+---
