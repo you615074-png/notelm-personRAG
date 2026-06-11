@@ -104,6 +104,15 @@ class SearchResult(BaseModel):
     notebook_name: str
 
 
+class SuggestedQuestionsRequest(BaseModel):
+    notebook_id: str
+    count: int = Field(default=4, ge=1, le=8)
+
+
+class SuggestedQuestionsResponse(BaseModel):
+    questions: list[str]
+
+
 class SettingsResponse(BaseModel):
     llm_base_url: str
     llm_api_key_set: bool

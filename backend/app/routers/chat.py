@@ -1,7 +1,9 @@
 import json
 import os
+import logging
 from datetime import datetime, timezone
 
+from openai import OpenAI
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse, PlainTextResponse
 
@@ -11,9 +13,13 @@ from app.models.schemas import (
     ChatCitation,
     ChatMessage,
     ConversationSyncRequest,
+    SuggestedQuestionsRequest,
+    SuggestedQuestionsResponse,
 )
 from app.services.rag import generate_answer, generate_answer_stream
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -58,6 +64,107 @@ def _notebook_exists(notebook_id: str) -> bool:
 
 def _now():
     return datetime.now(timezone.utc).isoformat()
+
+
+GENERIC_QUESTIONS = [
+    "What are the main topics covered in these documents?",
+    "Can you summarize the key points?",
+    "What are the most important takeaways?",
+    "How do these documents relate to each other?",
+    "What specific examples or data are provided?",
+    "What conclusions or recommendations are made?",
+    "Are there any key definitions I should know?",
+    "What is the overall structure of these documents?",
+]
+
+
+async def _generate_suggested_questions(notebook_id: str, count: int) -> list[str]:
+    """Generate suggested questions based on notebook document content.
+
+    Uses a generic probe query to find representative chunks from the notebook,
+    then asks the LLM to generate contextually relevant starter questions.
+    Falls back to generic questions when no documents are uploaded or the LLM
+    is unavailable.
+    """
+    from app.services.embedder import embed_query
+    from app.database import query_chunks
+
+    # Use a generic probe query to find representative document chunks
+    settings = get_settings()
+    probe_embedding = embed_query(
+        "key concepts main ideas overview summary topics highlights"
+    )
+
+    if probe_embedding is None:
+        return GENERIC_QUESTIONS[:count]
+
+    results = query_chunks(notebook_id, probe_embedding, top_k=5)
+
+    if not results:
+        return GENERIC_QUESTIONS[:count]
+
+    # Build a context summary from the retrieved chunks
+    context_parts = []
+    for item in results:
+        meta = item.get("metadata", {})
+        source = meta.get("source", meta.get("filename", "unknown"))
+        context_parts.append(f"--- From: {source} ---\n{item['text'][:500]}")
+    context = "\n\n".join(context_parts)
+
+    if not settings.is_llm_configured:
+        return GENERIC_QUESTIONS[:count]
+
+    try:
+        client = OpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_key)
+        resp = client.chat.completions.create(
+            model=settings.llm_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        f"You are a helpful assistant. Based on the provided document excerpts, "
+                        f"generate exactly {count} starter questions that a user might want to ask "
+                        f"about these documents. The questions should be diverse, covering different "
+                        f"aspects of the content. Each question should be concise (under 100 chars). "
+                        f"Output ONLY the questions, one per line, with no numbering, bullets, or prefixes. "
+                        f"Do not include any other text."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"Here are excerpts from the documents:\n\n{context}\n\nGenerate {count} starter questions.",
+                },
+            ],
+            temperature=0.7,
+            max_tokens=500,
+        )
+        raw = resp.choices[0].message.content.strip()
+        questions = [
+            q.strip().lstrip("-.•*0123456789) ")
+            for q in raw.split("\n")
+            if q.strip()
+        ]
+        # Keep only meaningful questions and truncate to requested count
+        questions = [q for q in questions if len(q) > 5][:count]
+        if len(questions) < count:
+            questions += GENERIC_QUESTIONS[: (count - len(questions))]
+        return questions
+    except Exception as e:
+        logger.warning(f"Failed to generate suggested questions: {e}")
+        return GENERIC_QUESTIONS[:count]
+
+
+@router.post("/suggested-questions", response_model=SuggestedQuestionsResponse)
+async def suggested_questions(body: SuggestedQuestionsRequest):
+    """Generate starter questions based on notebook document content.
+
+    Returns 3-5 contextually relevant questions when documents are uploaded,
+    or generic starter questions when the notebook is empty.
+    """
+    if not _notebook_exists(body.notebook_id):
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    questions = await _generate_suggested_questions(body.notebook_id, body.count)
+    return SuggestedQuestionsResponse(questions=questions)
 
 
 @router.post("", response_model=ChatResponse)
