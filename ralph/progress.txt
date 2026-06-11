@@ -65,3 +65,30 @@
   - The `?` shortcut is intentionally NOT gated behind Ctrl — just pressing `?` opens the help dialog (like Slack, VSCode, and most modern apps); this is safe because it skips when focus is in INPUT/TEXTAREA
   - The app's Sidebar is always rendered in the root layout, so `notelm:new-notebook` and `notelm:open-settings` dispatch works globally; notebook-specific events (`notelm:new-conversation`, `notelm:export-conversation`) are only handled when the notebook page is mounted, which is the correct behavior
 ---
+
+## 2026-06-11 ~22:00 UTC - US-018
+- Created `frontend/src/lib/ai-features.ts` — localStorage-based AI feature toggle management:
+  - `AI_FEATURE_KEYS` — const object mapping feature names to localStorage keys (`ai_suggested_questions_enabled`, `ai_auto_summaries_enabled`, `ai_smart_titles_enabled`)
+  - `isFeatureEnabled(key)` — reads toggle state from localStorage, defaults to `true` (enabled) when not set
+  - `setFeatureEnabled(key, value)` — persists toggle to localStorage immediately
+  - `AI_FEATURE_LABELS`, `AI_FEATURE_DESCRIPTIONS`, `AI_FEATURE_TOKEN_COST` — display metadata for settings UI
+- Updated `frontend/src/components/SettingsDialog.tsx`:
+  - Added `ToggleSwitch` component — Apple-style pill toggle with smooth CSS transition (translateX)
+  - Added "AI 功能" fieldset with three toggle rows: Suggested Questions (~100-300 tokens/time), Auto Summaries (~200-800 tokens/time), Smart Titles (~30-80 tokens/time)
+  - Each toggle shows description and estimated token cost
+  - Toggles persist to localStorage immediately on change (no Save needed); note explains "修改即时生效，无需保存"
+  - Used `as AIFeatureKey[]` type assertion for mapping over keys in JSX
+- Updated `frontend/src/components/ChatPanel.tsx`:
+  - Wrapped `NotebookSummary` rendering in `isFeatureEnabled(AI_FEATURE_KEYS.autoSummaries)` check
+  - Wrapped `SuggestedQuestions` rendering in `isFeatureEnabled(AI_FEATURE_KEYS.suggestedQuestions)` check
+  - Auto-title generation (`generateTitle` + `updateConversationTitle`) now guarded by `isFeatureEnabled(AI_FEATURE_KEYS.smartTitles)`
+- Updated `frontend/src/components/SourcePanel.tsx`:
+  - DocumentSummary rendering now requires both `expandedDocId === doc.id` AND `isFeatureEnabled(AI_FEATURE_KEYS.autoSummaries)`
+- Files changed: `frontend/src/lib/ai-features.ts` (new), `frontend/src/components/SettingsDialog.tsx`, `frontend/src/components/ChatPanel.tsx`, `frontend/src/components/SourcePanel.tsx`
+- **Learnings for future iterations:**
+  - AI feature toggles use immediate localStorage persistence (unlike API settings which require explicit Save) — this allows `isFeatureEnabled()` calls in sibling components' render paths to pick up changes on next re-render without page refresh
+  - The toggle changes take effect on the next render of the consuming component — e.g., after closing SettingsDialog and triggering a UI interaction (sending message, clicking document). No hard page reload needed
+  - For the `ToggleSwitch` component, used inline styles for the animated circle position (`translateX`) rather than Tailwind classes since Tailwind's arbitrary values don't easily support dynamic computed transforms
+  - The `Smart Titles` toggle controls whether `generateTitle()` auto-names conversations — when OFF, conversations keep their default "新对话" title; no LLM is involved in title generation currently (backend endpoint exists but isn't called from frontend)
+  - When adding a new localStorage-backed setting, the pattern is: utility module exports getter/setter + constants → SettingsDialog imports for UI → consuming components import getter for conditional rendering
+---
