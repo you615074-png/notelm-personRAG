@@ -1,6 +1,7 @@
 export interface Notebook {
   id: string
   name: string
+  tags: string[]
   created_at: string
   updated_at: string
 }
@@ -20,6 +21,8 @@ export interface ChatMessage {
   content: string
   citations?: Citation[]
   timestamp: string
+  title?: string | null
+  pinned?: boolean
 }
 
 export interface Citation {

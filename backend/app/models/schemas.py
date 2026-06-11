@@ -1,19 +1,24 @@
+from __future__ import annotations
+
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 
 class NotebookCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
+    tags: list[str] = Field(default_factory=list)
 
 
 class NotebookUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
+    tags: Optional[list[str]] = None
 
 
 class NotebookResponse(BaseModel):
     id: str
     name: str
+    tags: list[str] = Field(default_factory=list)
     created_at: str
     updated_at: str
 
@@ -32,6 +37,18 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1)
     top_k: Optional[int] = None
     chat_history: Optional[list[dict]] = None
+    title: Optional[str] = None
+    pinned: bool = False
+
+
+class ChatMessage(BaseModel):
+    id: str
+    role: str
+    content: str
+    citations: list[ChatCitation] = Field(default_factory=list)
+    timestamp: str
+    title: Optional[str] = None
+    pinned: bool = False
 
 
 class ChatCitation(BaseModel):

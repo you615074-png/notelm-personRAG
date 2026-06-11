@@ -79,6 +79,7 @@ async def list_notebooks():
             NotebookResponse(
                 id=nb_id,
                 name=nb_data["name"],
+                tags=nb_data.get("tags", []),
                 created_at=nb_data["created_at"],
                 updated_at=nb_data["updated_at"],
             )
@@ -92,9 +93,9 @@ async def create_notebook(body: NotebookCreate):
     nb_id = str(uuid.uuid4())
     now = _now()
     meta = _load_meta()
-    meta[nb_id] = {"name": body.name, "created_at": now, "updated_at": now}
+    meta[nb_id] = {"name": body.name, "tags": body.tags, "created_at": now, "updated_at": now}
     _save_meta(meta)
-    return NotebookResponse(id=nb_id, name=body.name, created_at=now, updated_at=now)
+    return NotebookResponse(id=nb_id, name=body.name, tags=body.tags, created_at=now, updated_at=now)
 
 
 @router.get("/notebooks/{notebook_id}", response_model=NotebookResponse)
@@ -106,6 +107,7 @@ async def get_notebook(notebook_id: str):
     return NotebookResponse(
         id=notebook_id,
         name=nb["name"],
+        tags=nb.get("tags", []),
         created_at=nb["created_at"],
         updated_at=nb["updated_at"],
     )
@@ -118,12 +120,15 @@ async def update_notebook(notebook_id: str, body: NotebookUpdate):
         raise HTTPException(status_code=404, detail="Notebook not found")
     if body.name is not None:
         meta[notebook_id]["name"] = body.name
+    if body.tags is not None:
+        meta[notebook_id]["tags"] = body.tags
     meta[notebook_id]["updated_at"] = _now()
     _save_meta(meta)
     nb = meta[notebook_id]
     return NotebookResponse(
         id=notebook_id,
         name=nb["name"],
+        tags=nb.get("tags", []),
         created_at=nb["created_at"],
         updated_at=nb["updated_at"],
     )
