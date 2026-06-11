@@ -259,3 +259,39 @@ Started: Thu Jun 11 14:16:16     2026
   - Question chips use `rounded-full` pill style with `bg-surface-canvas border border-hairline` — consistent with tag chip styling in Sidebar
   - The `onSelect` callback pattern allows the parent (ChatPanel) to handle the action without the child needing knowledge of the chat send flow
 ---
+
+## 2026-06-11 ~20:00 UTC - US-015
+- Added `DocumentSummaryResponse` and `NotebookSummaryResponse` TypeScript interfaces in `frontend/src/types/index.ts`
+- Added `api.summaries.document(docId)` and `api.summaries.notebook(notebookId)` methods in `frontend/src/lib/api.ts` calling POST endpoints
+- Created `frontend/src/components/DocumentSummary.tsx`:
+  - Expandable per-document summary section with initial "生成摘要" button
+  - Loading skeleton with spinner + animated placeholder bars
+  - Error state with retry button
+  - Summary display with "已缓存" badge when returned from backend cache
+  - Regenerate button (rotate SVG icon) to refresh via new API call
+  - Uses `generated` state to distinguish first generation from subsequent loads
+- Created `frontend/src/components/NotebookSummary.tsx`:
+  - Card layout with header ("笔记本摘要") and content area inside `.card` container
+  - Initial "生成摘要" button state when no summary generated yet
+  - Loading skeleton with spinner in header + animated placeholder bars
+  - Error state with retry button
+  - Summary text display with "已缓存" badge
+  - Regenerate button with text "重新生成" and animated spinner SVG while regenerating
+  - Separate `regenerating` state to avoid flashing skeleton during refresh
+- Updated `frontend/src/components/SourcePanel.tsx`:
+  - Added `expandedDocId` state to track which document summary is expanded
+  - Added chevron toggle button on each document row (revealed on hover, rotates 180° when expanded)
+  - Wrapped each document row in a container div with conditional `<DocumentSummary>` below when expanded
+  - Imported `useState` and `DocumentSummary`
+- Updated `frontend/src/components/ChatPanel.tsx`:
+  - Added `<NotebookSummary>` above `<SuggestedQuestions>` in the empty chat state
+  - Imported `NotebookSummary`
+- Files changed: `frontend/src/types/index.ts`, `frontend/src/lib/api.ts`, `frontend/src/components/DocumentSummary.tsx` (new), `frontend/src/components/NotebookSummary.tsx` (new), `frontend/src/components/SourcePanel.tsx`, `frontend/src/components/ChatPanel.tsx`
+- **Learnings for future iterations:**
+  - The summaries backend endpoints were already built in US-008 (`POST /api/documents/{doc_id}/summarize` and `POST /api/notebooks/{notebook_id}/summarize`) — this story only adds the frontend UI
+  - Summary responses include a `cached: boolean` flag from backend — use this to conditionally show the "已缓存" badge
+  - When a component has two loading modes (initial load vs refresh), use separate state variables (`loading` vs `regenerating`) to prevent UI flicker
+  - The expand/collapse pattern in SourcePanel uses a single `expandedDocId` state — setting it to a doc ID expands that one, setting to `null` collapses all; clicking the same doc again collapses it
+  - The chevron toggle uses `e.stopPropagation()` to avoid triggering both the expand toggle AND the `onSelectDoc` callback
+  - Unicode emoji in source files: when the Read tool shows surrogates, the actual file may contain literal emoji characters — use Write (not Edit) when exact match is tricky
+---
