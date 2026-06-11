@@ -1,4 +1,4 @@
-import type { Notebook, Document, ChatResponse, Citation, Note, SearchResult, SuggestedQuestionsResponse, DocumentSummaryResponse, NotebookSummaryResponse } from "@/types"
+import type { Notebook, Document, ChatResponse, Citation, Note, SearchResult, SuggestedQuestionsResponse, DocumentSummaryResponse, NotebookSummaryResponse, ChatMessage, ConversationMeta } from "@/types"
 
 const BASE = "/api"
 
@@ -135,6 +135,18 @@ export const api = {
       request<SuggestedQuestionsResponse>("/chat/suggested-questions", {
         method: "POST",
         body: JSON.stringify({ notebook_id: notebookId, count: count ?? 4 }),
+      }),
+
+    sync: (notebookId: string, messages: ChatMessage[]) =>
+      request<{ ok: boolean; message_count: number; conversations: ConversationMeta[] }>("/chat/sync", {
+        method: "POST",
+        body: JSON.stringify({ notebook_id: notebookId, messages }),
+      }),
+
+    updateTitle: (notebookId: string, convId: string, title: string) =>
+      request<{ ok: boolean }>(`/notebooks/${notebookId}/conversation/${convId}/title`, {
+        method: "PATCH",
+        body: JSON.stringify({ title }),
       }),
 
     stream: (

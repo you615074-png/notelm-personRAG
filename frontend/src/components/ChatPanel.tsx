@@ -3,6 +3,13 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import type { ChatMessage, Citation } from "@/types"
 import { api } from "@/lib/api"
+import {
+  loadMessages,
+  saveMessages,
+  createConversation,
+  generateTitle,
+  updateConversationTitle,
+} from "@/lib/conversations"
 import NoteEditor from "./NoteEditor"
 import SuggestedQuestions from "./SuggestedQuestions"
 import NotebookSummary from "./NotebookSummary"
@@ -10,37 +17,15 @@ import { useToast } from "./Toast"
 
 interface Props {
   notebookId: string
-}
-
-function getStorageKey(notebookId: string) {
-  return `chat_history_${notebookId}`
-}
-
-function loadMessages(notebookId: string): ChatMessage[] {
-  try {
-    const raw = localStorage.getItem(getStorageKey(notebookId))
-    if (raw) return JSON.parse(raw) as ChatMessage[]
-  } catch { }
-  return []
-}
-
-function saveMessages(notebookId: string, msgs: ChatMessage[]) {
-  try {
-    localStorage.setItem(getStorageKey(notebookId), JSON.stringify(msgs))
-  } catch { }
-}
-
-function clearMessages(notebookId: string) {
-  try {
-    localStorage.removeItem(getStorageKey(notebookId))
-  } catch { }
+  convId: string | null
+  onConvCreated?: (convId: string) => void
 }
 
 function getChatHistoryForAPI(msgs: ChatMessage[], currentMsgId: string): { role: string; content: string }[] {
   return msgs
-    .filter(m => m.id !== currentMsgId)
+    .filter((m) => m.id !== currentMsgId)
     .slice(-12)
-    .map(m => ({
+    .map((m) => ({
       role: m.role,
       content: m.content,
     }))
@@ -113,8 +98,10 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   )
 }
 
-export default function ChatPanel({ notebookId }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[]>(() => loadMessages(notebookId))
+export default function ChatPanel({ notebookId, convId, onConvCreated }: Props) {
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    convId ? loadMessages(notebookId, convId) : []
+  )
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [noteContent, setNoteContent] = useState("")
@@ -129,13 +116,44 @@ export default function ChatPanel({ notebookId }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [])
 
+  // Guard to prevent useEffect from reloading localStorage messages
+  // when a conversation was just auto-created mid-send (state already has
+  // the in-flight messages and we don't want localStorage to overwrite them).
+  const convAutoCreatedRef = useRef(false)
+
+  // Reload messages when notebook or conversation changes
+  useEffect(() => {
+    if (convAutoCreatedRef.current) {
+      convAutoCreatedRef.current = false
+      return
+    }
+    if (convId) {
+      setMessages(loadMessages(notebookId, convId))
+    } else {
+      setMessages([])
+    }
+    setInput("")
+    setLoading(false)
+  }, [notebookId, convId])
+
   useEffect(() => { scrollDown() }, [messages, scrollDown])
-  useEffect(() => { setMessages(loadMessages(notebookId)) }, [notebookId])
+
+  /** Ensures a conversation exists, creating one if needed. Returns the convId. */
+  function ensureConvId(firstMessage?: string): string {
+    if (convId) return convId
+    const newId = createConversation(notebookId, firstMessage)
+    convAutoCreatedRef.current = true
+    onConvCreated?.(newId)
+    return newId
+  }
 
   async function send(text?: string) {
     const msgText = (text ?? input).trim()
     if (!msgText || loading) return
     if (!text) setInput("")
+
+    const activeConvId = ensureConvId(msgText)
+
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       role: "user",
@@ -144,7 +162,7 @@ export default function ChatPanel({ notebookId }: Props) {
     }
     const updatedMessages = [...messages, userMsg]
     setMessages(updatedMessages)
-    saveMessages(notebookId, updatedMessages)
+    saveMessages(notebookId, activeConvId, updatedMessages)
     setLoading(true)
 
     const assistantId = (Date.now() + 1).toString()
@@ -155,7 +173,7 @@ export default function ChatPanel({ notebookId }: Props) {
       timestamp: new Date().toISOString(),
       citations: [],
     }
-    setMessages(prev => [...prev, assistantMsg])
+    setMessages((prev) => [...prev, assistantMsg])
     pendingCitationsRef.current = []
 
     const chatHistory = getChatHistoryForAPI(updatedMessages, "")
@@ -183,7 +201,15 @@ export default function ChatPanel({ notebookId }: Props) {
               ? { ...m, citations: pendingCitationsRef.current }
               : m
           )
-          saveMessages(notebookId, final)
+          saveMessages(notebookId, activeConvId, final)
+
+          // Auto-update title from first user message after first exchange completes
+          const userMsgs = final.filter((m) => m.role === "user")
+          if (userMsgs.length === 1 && userMsgs[0].content === msgText) {
+            const autoTitle = generateTitle(msgText)
+            updateConversationTitle(notebookId, activeConvId, autoTitle)
+          }
+
           return final
         })
       },
@@ -192,7 +218,7 @@ export default function ChatPanel({ notebookId }: Props) {
           const next = prev.map((m) =>
             m.id === assistantId ? { ...m, content: `错误：${err.message}` } : m
           )
-          saveMessages(notebookId, next)
+          saveMessages(notebookId, activeConvId, next)
           return next
         })
         setLoading(false)
@@ -206,7 +232,9 @@ export default function ChatPanel({ notebookId }: Props) {
   }
   function confirmClear() {
     setMessages([])
-    clearMessages(notebookId)
+    if (convId) {
+      saveMessages(notebookId, convId, [])
+    }
     setShowClearConfirm(false)
   }
 
@@ -231,11 +259,14 @@ export default function ChatPanel({ notebookId }: Props) {
     }
   }
 
+  const hasMessages = messages.length > 0
+  const showEmptyState = !hasMessages && !loading
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="px-6 py-3 border-b border-hairline flex items-center justify-between">
         <h3 className="text-apple-caption font-semibold text-ink">对话</h3>
-        {messages.length > 0 && (
+        {hasMessages && (
           <div className="flex items-center gap-1">
             <button onClick={handleExport} className="text-apple-fine text-ink-secondary hover:text-primary btn-ghost p-1" title="导出对话">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -252,7 +283,7 @@ export default function ChatPanel({ notebookId }: Props) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-4">
-        {messages.length === 0 && (
+        {showEmptyState && (
           <div className="h-full flex flex-col items-center justify-center">
             <NotebookSummary notebookId={notebookId} />
             <SuggestedQuestions
@@ -309,9 +340,9 @@ export default function ChatPanel({ notebookId }: Props) {
 
       {showClearConfirm && (
         <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center" onClick={() => setShowClearConfirm(false)}>
-          <div className="bg-surface-canvas shadow-2xl w-80 p-6 animate-fade-in" style={{ borderRadius: 18 }} onClick={e => e.stopPropagation()}>
+          <div className="bg-surface-canvas shadow-2xl w-80 p-6 animate-fade-in" style={{ borderRadius: 18 }} onClick={(e) => e.stopPropagation()}>
             <h3 className="text-apple-body-strong text-ink mb-2">清空对话？</h3>
-            <p className="text-apple-caption text-ink-secondary mb-4">当前笔记本的所有对话历史将被删除，此操作不可撤销。</p>
+            <p className="text-apple-caption text-ink-secondary mb-4">当前对话的所有消息将被删除，此操作不可撤销。</p>
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowClearConfirm(false)} className="btn-outline text-apple-caption">取消</button>
               <button onClick={confirmClear} className="btn-sm bg-red-500">确认清空</button>
