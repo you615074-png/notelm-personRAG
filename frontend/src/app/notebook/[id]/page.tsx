@@ -25,7 +25,7 @@ export default function NotebookPage() {
   async function rename() {
     const name = window.prompt("重命名笔记本：", notebook?.name)
     if (!name?.trim() || !notebook) return
-    await api.notebooks.update(id, name.trim())
+    await api.notebooks.update(id, { name: name.trim() })
     setNotebook({ ...notebook, name: name.trim() })
   }
 

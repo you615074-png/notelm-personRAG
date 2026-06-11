@@ -41,13 +41,21 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ name }),
       }),
-    update: (id: string, name: string) =>
+    update: (id: string, data: { name?: string; tags?: string[] }) =>
       request<Notebook>(`/notebooks/${id}`, {
         method: "PATCH",
-        body: JSON.stringify({ name }),
+        body: JSON.stringify(data),
       }),
     delete: (id: string) =>
       request<void>(`/notebooks/${id}`, { method: "DELETE" }),
+  },
+
+  tags: {
+    list: () => request<string[]>("/tags"),
+    delete: (name: string) =>
+      request<{ ok: boolean; removed_from: number }>(`/tags/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      }),
   },
 
   documents: {
