@@ -162,6 +162,10 @@ async def delete_notebook(notebook_id: str):
     if os.path.exists(notes_file):
         os.remove(notes_file)
 
+    conv_file = os.path.join(settings.data_dir, "conversations", f"{notebook_id}.json")
+    if os.path.exists(conv_file):
+        os.remove(conv_file)
+
     return {"ok": True, "removed_documents": removed_count}
 
 

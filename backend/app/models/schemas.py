@@ -92,6 +92,11 @@ class SettingsUpdate(BaseModel):
     embed_model: Optional[str] = None
 
 
+class ConversationSyncRequest(BaseModel):
+    notebook_id: str
+    messages: list[ChatMessage]
+
+
 class SearchResult(BaseModel):
     snippet: str
     source: str

@@ -55,3 +55,19 @@ Started: Thu Jun 11 14:16:16     2026
   - When querying ChromaDB collections, always check `col.count() == 0` first to avoid errors on empty collections
   - Use `py` instead of `python` for Python commands on Windows — see Codebase Patterns
 ---
+
+## 2026-06-11 ~15:15 UTC - US-005
+- Added `ConversationSyncRequest` Pydantic model in schemas.py (notebook_id + list[ChatMessage])
+- Added conversation storage helpers `_load_conversations()` / `_save_conversations()` in chat.py, storing to `data/conversations/{notebook_id}.json`
+- Added `POST /api/chat/sync` endpoint to persist conversation messages from frontend
+- Added `GET /api/chat/export/{notebook_id}` endpoint returning Markdown with notebook name, export date, role-labelled messages with citations as footnotes, Content-Disposition: attachment
+- Added notebook existence validation in sync endpoint (404 if notebook not found)
+- Added conversation file cleanup in `delete_notebook()` in notebooks.py
+- Files changed: `backend/app/models/schemas.py`, `backend/app/routers/chat.py`, `backend/app/routers/notebooks.py`
+- **Learnings for future iterations:**
+  - Conversations are stored in `data/conversations/{notebook_id}.json` — same file-per-notebook pattern as notes
+  - Export Markdown uses `[^n]` footnote syntax (both body reference and definition must have `^` for proper linking)
+  - Avoid importing private helpers across router modules — inline the lookup or use a shared utility
+  - Notebook name lookup reads `notebooks_meta.json` directly instead of importing from notebooks router
+  - `PlainTextResponse` with `text/markdown` media type and `Content-Disposition: attachment` triggers download
+---
