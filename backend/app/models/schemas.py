@@ -120,3 +120,15 @@ class SettingsResponse(BaseModel):
     embed_base_url: str
     embed_api_key_set: bool
     embed_model: str
+
+
+class DocumentSummaryResponse(BaseModel):
+    doc_id: str
+    summary: str
+    cached: bool
+
+
+class NotebookSummaryResponse(BaseModel):
+    notebook_id: str
+    summary: str
+    cached: bool
