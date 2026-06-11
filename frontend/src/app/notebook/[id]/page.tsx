@@ -45,6 +45,14 @@ export default function NotebookPage() {
     refreshConversations()
   }, [id])
 
+  // Listen for keyboard shortcut to create new conversation
+  useEffect(() => {
+    const handler = () => handleNewConv()
+    window.addEventListener("notelm:new-conversation", handler)
+    return () => window.removeEventListener("notelm:new-conversation", handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
   async function rename() {
     const name = window.prompt("重命名笔记本：", notebook?.name)
     if (!name?.trim() || !notebook) return

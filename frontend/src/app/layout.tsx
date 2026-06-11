@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import "./globals.css"
 import Sidebar from "@/components/Sidebar"
 import SearchDialog from "@/components/SearchDialog"
+import KeyboardShortcuts from "@/components/KeyboardShortcuts"
 import { ToastProvider } from "@/components/Toast"
 import { ThemeProvider } from "@/components/ThemeProvider"
 
@@ -20,6 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Sidebar />
               <main className="flex-1 min-w-0">{children}</main>
               <SearchDialog />
+              <KeyboardShortcuts />
             </div>
           </ToastProvider>
         </ThemeProvider>

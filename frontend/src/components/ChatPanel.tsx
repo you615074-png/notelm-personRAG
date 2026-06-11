@@ -112,6 +112,12 @@ export default function ChatPanel({ notebookId, convId, onConvCreated }: Props) 
   const pendingCitationsRef = useRef<Citation[]>([])
   const { toast } = useToast()
 
+  // Refs so the custom event listener always reads the latest values
+  const notebookIdRef = useRef(notebookId)
+  notebookIdRef.current = notebookId
+  const hasMessagesRef = useRef(false)
+  hasMessagesRef.current = messages.length > 0
+
   const scrollDown = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [])
@@ -137,6 +143,22 @@ export default function ChatPanel({ notebookId, convId, onConvCreated }: Props) 
   }, [notebookId, convId])
 
   useEffect(() => { scrollDown() }, [messages, scrollDown])
+
+  // Listen for keyboard shortcut to export conversation
+  useEffect(() => {
+    const handler = async () => {
+      if (!hasMessagesRef.current) return
+      try {
+        await api.chat.export(notebookIdRef.current)
+        toast("对话已导出", "success")
+      } catch (e) {
+        toast(e instanceof Error ? e.message : "导出失败", "error")
+      }
+    }
+    window.addEventListener("notelm:export-conversation", handler)
+    return () => window.removeEventListener("notelm:export-conversation", handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   /** Ensures a conversation exists, creating one if needed. Returns the convId. */
   function ensureConvId(firstMessage?: string): string {

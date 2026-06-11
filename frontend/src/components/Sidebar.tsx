@@ -61,6 +61,19 @@ export default function Sidebar() {
     return () => window.removeEventListener("focus", handleFocus)
   }, [load])
 
+  // Listen for keyboard shortcut custom events
+  useEffect(() => {
+    const handleNewNotebook = () => create()
+    const handleOpenSettings = () => setSettingsOpen(true)
+
+    window.addEventListener("notelm:new-notebook", handleNewNotebook)
+    window.addEventListener("notelm:open-settings", handleOpenSettings)
+    return () => {
+      window.removeEventListener("notelm:new-notebook", handleNewNotebook)
+      window.removeEventListener("notelm:open-settings", handleOpenSettings)
+    }
+  }, [])
+
   useEffect(() => {
     if (addingTagFor && tagInputRef.current) {
       tagInputRef.current.focus()
