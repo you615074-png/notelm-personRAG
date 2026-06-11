@@ -31,8 +31,8 @@
         "Python imports succeed and app starts without errors"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Global search index with startup migration, add/remove on document upload/delete"
     },
     {
       "id": "US-003",
