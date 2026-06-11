@@ -9,6 +9,7 @@ Started: Thu Jun 11 14:16:16     2026
 - Frontend TypeScript types mirror backend Pydantic schemas in `frontend/src/types/index.ts`
 - Python import test: `python -c "from app.models.schemas import NotebookResponse, ChatMessage"` from the `backend/` directory
 - TypeScript check: `npx tsc --noEmit` from the `frontend/` directory (with `npm install` first if node_modules missing)
+- File download from API: use raw `fetch()` + `res.blob()` (NOT `request<T>()` which calls `res.json()`); parse Content-Disposition header for filename; trigger download via URL.createObjectURL → anchor.click → URL.revokeObjectURL
 
 ## 2026-06-11 14:20 UTC - US-001
 - Added `tags: list[str]` to NotebookCreate, NotebookUpdate, NotebookResponse in `backend/app/models/schemas.py`
@@ -168,4 +169,93 @@ Started: Thu Jun 11 14:16:16     2026
   - CSS approach: use `dark:` Tailwind variants for dark mode — arbitrary hex values like `dark:bg-[#3a3a3c]` work but prefer semantic tokens like `bg-surface-canvas` when available
   - The `tags` API namespace is separate from `notebooks` — tags have their own `GET /api/tags` list and `DELETE /api/tags/{name}` bulk-delete endpoints
   - Sidebar state for tags is local to Sidebar component (no global store) — consistent with existing pattern; window focus event triggers reload
+---
+
+## 2026-06-11 ~18:00 UTC - US-011
+- Added `SearchResult` interface to `frontend/src/types/index.ts` matching backend schema (snippet, source, notebook_id, notebook_name)
+- Added `api.search(q)` method in `frontend/src/lib/api.ts` calling `GET /api/search?q=`
+- Created `frontend/src/components/SearchDialog.tsx` with:
+  - Global Ctrl+K keyboard shortcut (skips when focus is in INPUT/TEXTAREA)
+  - Debounced search (300ms) using useRef for timer cleanup
+  - Loading spinner (animated SVG) and "未找到结果" empty state
+  - Results with snippet, source filename, notebook name, and line-clamp-2 truncation
+  - Arrow key navigation (Up/Down) with selected highlight (bg-primary/8)
+  - Enter to navigate, Escape to close, backdrop click to close
+  - ESC badge in search bar for discoverability
+  - Dark mode support (dark:bg-[#2c2c2e])
+- Added `<SearchDialog />` to root layout in `frontend/src/app/layout.tsx`
+- Files changed: `frontend/src/types/index.ts`, `frontend/src/lib/api.ts`, `frontend/src/components/SearchDialog.tsx` (new), `frontend/src/app/layout.tsx`
+- **Learnings for future iterations:**
+  - Use `openRef` pattern for Escape key handler to avoid stale closure in global event listener
+  - Ctrl+K check must skip when `document.activeElement` is INPUT/TEXTAREA — check `e.target.tagName`
+  - The `api.search()` method follows the same `request<T>()` pattern as all other API methods
+  - Search dialog is a self-contained client component — just drop it in the layout, no props or context needed
+  - For the `selectedIndex`, reset to 0 when query or results change to avoid out-of-bounds
+  - The `.line-clamp-2` Tailwind utility works for snippet truncation (requires Tailwind v3.3+)
+---
+
+## 2026-06-11 ~18:30 UTC - US-012
+- Added `api.chat.export()` method in `frontend/src/lib/api.ts`:
+  - Raw fetch to `GET /api/chat/export/{notebook_id}` (not JSON — blob response)
+  - Parses Content-Disposition header for filename
+  - Triggers browser download via `URL.createObjectURL` + anchor click + `URL.revokeObjectURL`
+  - Throws on non-OK responses for error toast
+- Added export button (download SVG icon) in ChatPanel header alongside "清空" button:
+  - Conditionally rendered only when `messages.length > 0` (same as clear button)
+  - Calls `api.chat.export(notebookId)` on click
+  - Toast notification: "对话已导出" on success, error message on failure
+  - Imported `useToast` from `./Toast`
+- Files changed: `frontend/src/lib/api.ts`, `frontend/src/components/ChatPanel.tsx`
+- **Learnings for future iterations:**
+  - File download responses use raw `fetch()` + `res.blob()`, NOT the `request<T>()` helper which always calls `res.json()`
+  - Browser file download: createObjectURL → create anchor → click → remove anchor → revokeObjectURL
+  - The Content-Disposition header from backend looks like `attachment; filename="xxx.md"` — parse with regex
+  - Toast hook is already available globally via `ToastProvider` in root layout — just import `useToast` and destructure `{ toast }`
+  - This is the first file-download pattern in the frontend; US-013 (notebook ZIP export) will reuse the same pattern
+---
+
+## 2026-06-11 ~19:00 UTC - US-013
+- Added `api.notebooks.export(id)` method in `frontend/src/lib/api.ts`:
+  - Raw fetch to `GET /api/notebooks/{id}/export` (blob response — NOT JSON)
+  - Parses Content-Disposition header for filename (default fallback: `notebook_{id}.zip`)
+  - Triggers browser download via URL.createObjectURL → anchor.click → revokeObjectURL
+  - Follows the same pattern established in US-012 for `api.chat.export()`
+- Added context menu (three-dot "..." button) to each notebook row in Sidebar.tsx:
+  - Click toggles a dropdown menu positioned below the button
+  - Click-outside detection via `mousedown` event listener with ref check
+  - Menu contains "导出笔记本" option with download icon
+  - Toast notification: "笔记本已导出" on success, error message on failure
+  - Three-dot button: `shrink-0 mr-1` with vertical dots SVG icon, highlights when menu open
+- Files changed: `frontend/src/lib/api.ts`, `frontend/src/components/Sidebar.tsx`
+- **Learnings for future iterations:**
+  - The notebooks export ZIP endpoint was already built in US-006 (`GET /api/notebooks/{id}/export`) — this story only adds the frontend trigger
+  - Context menu dropdown uses `position: absolute` relative to a `position: relative` parent row with `z-30` to stay above content
+  - Click-outside pattern: `mousedown` listener on document, check `ref.current.contains(e.target)`, clean up in useEffect return
+  - The "..." button must use `e.preventDefault()` + `e.stopPropagation()` to avoid Link navigation when toggling the menu
+  - The three-dot icon uses three `<circle>` elements (not lines) for a cleaner look at small sizes
+  - The `contextMenuFor` state stores the notebook ID whose menu is open — setting to `null` closes all menus
+---
+
+## 2026-06-11 ~19:30 UTC - US-014
+- Added `SuggestedQuestionsResponse` interface in `frontend/src/types/index.ts`
+- Added `api.chat.suggestedQuestions(notebookId, count?)` method in `frontend/src/lib/api.ts` calling `POST /api/chat/suggested-questions`
+- Created `frontend/src/components/SuggestedQuestions.tsx` with:
+  - Loading skeleton (4 animate-pulse bars with staggered widths) for initial load
+  - Error state with retry button
+  - Question chips as clickable pill buttons with hover transitions
+  - Refresh button (rotate SVG icon) to regenerate questions without flashing skeleton
+  - Empty state: renders null when no questions returned
+  - Uses `refreshing` state to distinguish initial load from refresh — preserves existing questions during refresh
+- Integrated into `ChatPanel.tsx`:
+  - Replaced static empty-state placeholder with `<SuggestedQuestions>` when `messages.length === 0`
+  - Refactored `send()` to accept optional `text?: string` parameter — clicking a suggested question passes the question text directly
+  - Send button and Enter key handler call `send()` without args (reads from input state)
+- Added `SuggestedQuestionsResponse` to `@/types` import in api.ts
+- Files changed: `frontend/src/types/index.ts`, `frontend/src/lib/api.ts`, `frontend/src/components/SuggestedQuestions.tsx` (new), `frontend/src/components/ChatPanel.tsx`
+- **Learnings for future iterations:**
+  - When adding an optional parameter to an existing function that's used as an `onClick` handler, wrap with an arrow function to avoid TypeScript type mismatch (MouseEvent vs custom param type)
+  - The `SuggestedQuestions` backend endpoint was already built in US-007 (`POST /api/chat/suggested-questions`) — this story only adds the frontend UI
+  - Use `setRefreshing` (separate from `setLoading`) when refreshing visible content to avoid replacing UI with skeleton mid-interaction
+  - Question chips use `rounded-full` pill style with `bg-surface-canvas border border-hairline` — consistent with tag chip styling in Sidebar
+  - The `onSelect` callback pattern allows the parent (ChatPanel) to handle the action without the child needing knowledge of the chat send flow
 ---

@@ -59,3 +59,7 @@ export interface SearchResult {
   notebook_id: string
   notebook_name: string
 }
+
+export interface SuggestedQuestionsResponse {
+  questions: string[]
+}

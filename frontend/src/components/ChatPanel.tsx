@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import type { ChatMessage, Citation } from "@/types"
 import { api } from "@/lib/api"
 import NoteEditor from "./NoteEditor"
+import SuggestedQuestions from "./SuggestedQuestions"
 import { useToast } from "./Toast"
 
 interface Props {
@@ -130,14 +131,14 @@ export default function ChatPanel({ notebookId }: Props) {
   useEffect(() => { scrollDown() }, [messages, scrollDown])
   useEffect(() => { setMessages(loadMessages(notebookId)) }, [notebookId])
 
-  async function send() {
-    const text = input.trim()
-    if (!text || loading) return
-    setInput("")
+  async function send(text?: string) {
+    const msgText = (text ?? input).trim()
+    if (!msgText || loading) return
+    if (!text) setInput("")
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       role: "user",
-      content: text,
+      content: msgText,
       timestamp: new Date().toISOString(),
     }
     const updatedMessages = [...messages, userMsg]
@@ -159,7 +160,7 @@ export default function ChatPanel({ notebookId }: Props) {
     const chatHistory = getChatHistoryForAPI(updatedMessages, "")
 
     api.chat.stream(
-      notebookId, text,
+      notebookId, msgText,
       (data) => {
         if (typeof data === "string") {
           setMessages((prev) =>
@@ -251,8 +252,11 @@ export default function ChatPanel({ notebookId }: Props) {
 
       <div className="flex-1 overflow-y-auto px-6 py-4">
         {messages.length === 0 && (
-          <div className="h-full flex items-center justify-center text-apple-caption text-ink-secondary">
-            基于你的源文档提问
+          <div className="h-full flex flex-col items-center justify-center">
+            <SuggestedQuestions
+              notebookId={notebookId}
+              onSelect={(question) => send(question)}
+            />
           </div>
         )}
         {messages.map((msg) => (
@@ -293,7 +297,7 @@ export default function ChatPanel({ notebookId }: Props) {
             className="input-field flex-1 text-apple-caption"
             disabled={loading}
           />
-          <button onClick={send} disabled={loading || !input.trim()} className="btn-primary shrink-0 !px-5">
+          <button onClick={() => send()} disabled={loading || !input.trim()} className="btn-primary shrink-0 !px-5">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
               <path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>

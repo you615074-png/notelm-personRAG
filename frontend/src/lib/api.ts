@@ -1,4 +1,4 @@
-import type { Notebook, Document, ChatResponse, Citation, Note, SearchResult } from "@/types"
+import type { Notebook, Document, ChatResponse, Citation, Note, SearchResult, SuggestedQuestionsResponse } from "@/types"
 
 const BASE = "/api"
 
@@ -130,6 +130,12 @@ export const api = {
         document.body.removeChild(a)
         URL.revokeObjectURL(url)
       },
+
+    suggestedQuestions: (notebookId: string, count?: number) =>
+      request<SuggestedQuestionsResponse>("/chat/suggested-questions", {
+        method: "POST",
+        body: JSON.stringify({ notebook_id: notebookId, count: count ?? 4 }),
+      }),
 
     stream: (
       notebookId: string,
