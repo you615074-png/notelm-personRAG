@@ -1,289 +1,289 @@
-{
-  "project": "Notelm",
-  "branchName": "ralph/notelm-v2",
-  "description": "Notelm v2.0 — Achieve 80%+ NotebookLM UX parity with tags, global search, export, suggested questions, summaries, conversation titles, and keyboard shortcuts",
-  "userStories": [
-    {
-      "id": "US-001",
-      "title": "Extend notebook and chat metadata schemas",
-      "description": "As a developer, I need to store tags on notebooks and title/pinned on conversations so frontend features can persist these values.",
-      "acceptanceCriteria": [
-        "Add tags: List[str] with default [] to notebook metadata schema in backend/app/models/schemas.py",
-        "Add title: Optional[str] and pinned: bool fields to chat-related schemas",
-        "Update notebook create/update endpoints to accept and persist tags",
-        "Update frontend TypeScript types in frontend/src/types/index.ts to include new fields",
-        "Python imports succeed: python -c 'from app.models.schemas import NotebookResponse'",
-        "TypeScript compilation passes: cd frontend && npx tsc --noEmit"
-      ],
-      "priority": 1,
-      "passes": true,
-      "notes": "Schema extended with tags, title, pinned. ChatMessage model added."
-    },
-    {
-      "id": "US-002",
-      "title": "Create global search index in ChromaDB",
-      "description": "As a developer, I need a global ChromaDB collection indexing documents across all notebooks for cross-notebook search functionality.",
-      "acceptanceCriteria": [
-        "Create global_search ChromaDB collection in backend/app/database.py on app startup",
-        "Add documents to global index on upload with notebook_id metadata",
-        "Remove documents from global index when deleted",
-        "Add startup migration that re-indexes all existing documents into global_search",
-        "Python imports succeed and app starts without errors"
-      ],
-      "priority": 2,
-      "passes": true,
-      "notes": "Global search index with startup migration, add/remove on document upload/delete"
-    },
-    {
-      "id": "US-003",
-      "title": "Tag management API endpoints",
-      "description": "As a frontend developer, I need CRUD API endpoints for notebook tags so users can create, list, filter, and delete tags.",
-      "acceptanceCriteria": [
-        "PATCH /api/notebooks/{id} accepts tags in request body and persists to metadata",
-        "GET /api/notebooks supports ?tag=xxx query param to filter by tag",
-        "GET /api/tags returns deduplicated list of all unique tags across all notebooks",
-        "DELETE /api/tags/{name} removes the specified tag from all notebooks",
-        "Each endpoint returns proper error responses for invalid input (400) and not found (404)",
-        "Tags persist across app restarts"
-      ],
-      "priority": 3,
-      "passes": true,
-      "notes": "Tag filtering, list tags, and delete tag endpoints added to notebooks router"
-    },
-    {
-      "id": "US-004",
-      "title": "Global search API endpoint",
-      "description": "As a frontend developer, I need an API that searches across all notebooks and returns results with notebook context.",
-      "acceptanceCriteria": [
-        "GET /api/search?q=xxx queries the global_search ChromaDB collection",
-        "Each result includes: snippet, source, notebook_id, notebook_name",
-        "Results deduplicated by chunk content",
-        "Returns empty array when query is empty or no results found",
-        "Response time under 2 seconds"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "SearchResult schema, query_global() in database.py, search router registered"
-    },
-    {
-      "id": "US-005",
-      "title": "Export conversation API",
-      "description": "As a frontend developer, I need an API that exports a notebook conversation history as formatted Markdown for download.",
-      "acceptanceCriteria": [
-        "GET /api/chat/export/{notebook_id} returns Markdown string with all messages",
-        "Markdown includes: notebook name as title, date, role labels, citations as footnotes",
-        "Response header Content-Disposition: attachment",
-        "Returns 404 if notebook has no conversations",
-        "Backend starts without errors"
-      ],
-      "priority": 5,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-006",
-      "title": "Export notebook API (ZIP package)",
-      "description": "As a user, I want to export an entire notebook as a downloadable ZIP package containing documents, conversations, and metadata.",
-      "acceptanceCriteria": [
-        "GET /api/notebooks/{id}/export returns a ZIP file via StreamingResponse",
-        "ZIP contains: README.md, conversation.md, metadata.json, documents/ folder",
-        "Use Python zipfile stdlib, no temp files on disk",
-        "Proper Content-Disposition header",
-        "Returns 404 if notebook not found"
-      ],
-      "priority": 6,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-007",
-      "title": "Suggested questions API",
-      "description": "As a frontend developer, I need a configurable API that uses LLM to generate relevant starter questions based on notebook documents.",
-      "acceptanceCriteria": [
-        "POST /api/chat/suggested-questions accepts {notebook_id} and returns 3-5 questions",
-        "Questions are contextually relevant to uploaded documents",
-        "Returns generic starter questions when no documents uploaded",
-        "Accepts optional count param (default 4, min 1, max 8)",
-        "Backend starts without errors"
-      ],
-      "priority": 7,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-008",
-      "title": "Summary generation API (document + notebook)",
-      "description": "As a frontend developer, I need APIs to generate document-level and notebook-level summaries using LLM with caching.",
-      "acceptanceCriteria": [
-        "POST /api/documents/{doc_id}/summarize generates summary of a single document",
-        "POST /api/notebooks/{notebook_id}/summarize generates overview of all documents",
-        "Both endpoints cache summaries and return cached version if exists",
-        "Cache invalidated when document content changes",
-        "Returns proper error when not found (404)"
-      ],
-      "priority": 8,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-009",
-      "title": "Auto-generate conversation titles",
-      "description": "As a developer, I need the backend to auto-generate a title for each conversation from the first user message.",
-      "acceptanceCriteria": [
-        "When first user message is sent, backend auto-generates a title",
-        "Default: smart truncation of first 50 chars at word boundary",
-        "Title stored in conversation metadata",
-        "PATCH /api/notebooks/{id}/conversation/{conv_id}/title allows manual edit",
-        "Backend starts without errors"
-      ],
-      "priority": 9,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-010",
-      "title": "Tag management UI in sidebar",
-      "description": "As a user, I want to see, add, and filter tags on notebooks in the sidebar so I can organize my work.",
-      "acceptanceCriteria": [
-        "Each notebook shows tags as colored chips below its name",
-        "Add tag with inline input and autocomplete from existing tags",
-        "Click tag chip to filter sidebar to notebooks with that tag",
-        "Clear filter with x button or All Notebooks option",
-        "Empty state when no notebooks match selected tag",
-        "TypeScript compilation passes"
-      ],
-      "priority": 10,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-011",
-      "title": "Global search UI with keyboard shortcut",
-      "description": "As a user, I want a Ctrl+K search bar that finds content across all my notebooks.",
-      "acceptanceCriteria": [
-        "Search bar triggered by Ctrl+K keyboard shortcut",
-        "Debounced search (300ms) against GET /api/search",
-        "Results show: snippet, document name, notebook name",
-        "Clicking result navigates to that notebook",
-        "Loading spinner and no results empty state",
-        "TypeScript compilation passes"
-      ],
-      "priority": 11,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-012",
-      "title": "Export conversation button in ChatPanel",
-      "description": "As a user, I want to export the current conversation as Markdown with one click.",
-      "acceptanceCriteria": [
-        "Export button (download icon) in ChatPanel header",
-        "Click triggers download of Markdown file",
-        "Toast notification on success and error",
-        "Button disabled when conversation is empty",
-        "TypeScript compilation passes"
-      ],
-      "priority": 12,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-013",
-      "title": "Export notebook button in Sidebar",
-      "description": "As a user, I want to export an entire notebook as a ZIP package from the sidebar.",
-      "acceptanceCriteria": [
-        "Export option in notebook context menu",
-        "Click triggers download of ZIP file",
-        "Toast notification with progress and success/error states",
-        "TypeScript compilation passes"
-      ],
-      "priority": 13,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-014",
-      "title": "Suggested questions panel in chat area",
-      "description": "As a user, I want to see AI-generated suggested questions when I open a notebook.",
-      "acceptanceCriteria": [
-        "Show suggested questions as clickable chips when chat is empty",
-        "Clicking a question sends it as user message",
-        "Questions disappear after first message sent",
-        "Refresh button to regenerate questions",
-        "Loading skeleton while generating",
-        "TypeScript compilation passes"
-      ],
-      "priority": 14,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-015",
-      "title": "Summary display cards for documents and notebooks",
-      "description": "As a user, I want to see AI-generated summaries for documents and notebook overviews.",
-      "acceptanceCriteria": [
-        "Expandable summary section on each document in SourcePanel",
-        "Notebook summary card in chat area when empty",
-        "Generate Summary button with loading state",
-        "Summary persists on revisit (cached)",
-        "Regenerate button to refresh",
-        "TypeScript compilation passes"
-      ],
-      "priority": 15,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-016",
-      "title": "Conversation history panel with auto-titles",
-      "description": "As a user, I want to see my conversation history with auto-generated titles and switch between conversations.",
-      "acceptanceCriteria": [
-        "Conversation history panel showing past conversations with titles",
-        "Each entry shows title, date, message count",
-        "Click to switch conversation, current one highlighted",
-        "Pin/unpin and delete buttons on each conversation",
-        "New Conversation button to start fresh",
-        "Empty state for no conversations",
-        "TypeScript compilation passes"
-      ],
-      "priority": 16,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-017",
-      "title": "Keyboard shortcuts system",
-      "description": "As a power user, I want keyboard shortcuts for common actions.",
-      "acceptanceCriteria": [
-        "Ctrl+K: Open global search",
-        "Ctrl+J: New conversation",
-        "Ctrl+E: Export current conversation",
-        "Ctrl+N: New notebook",
-        "Ctrl+,: Open settings",
-        "?: Show keyboard shortcuts help dialog",
-        "Shortcuts not active when typing in input/textarea",
-        "TypeScript compilation passes"
-      ],
-      "priority": 17,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "US-018",
-      "title": "Settings panel — AI feature toggles",
-      "description": "As a user, I want to enable/disable LLM-powered features to control API costs.",
-      "acceptanceCriteria": [
-        "New AI Features section in SettingsDialog",
-        "Toggles for: Suggested Questions, Auto Summaries, Smart Titles",
-        "Toggles saved to localStorage",
-        "UI respects toggle state without page refresh",
-        "Each toggle shows estimated token cost",
-        "Existing settings continue to work unchanged",
-        "TypeScript compilation passes"
-      ],
-      "priority": 18,
-      "passes": false,
-      "notes": ""
-    }
-  ]
+﻿{
+    "project":  "Notelm",
+    "branchName":  "ralph/notelm-v2",
+    "description":  "Notelm v2.0 — Achieve 80%+ NotebookLM UX parity with tags, global search, export, suggested questions, summaries, conversation titles, and keyboard shortcuts",
+    "userStories":  [
+                        {
+                            "id":  "US-001",
+                            "title":  "Extend notebook and chat metadata schemas",
+                            "description":  "As a developer, I need to store tags on notebooks and title/pinned on conversations so frontend features can persist these values.",
+                            "acceptanceCriteria":  [
+                                                       "Add tags: List[str] with default [] to notebook metadata schema in backend/app/models/schemas.py",
+                                                       "Add title: Optional[str] and pinned: bool fields to chat-related schemas",
+                                                       "Update notebook create/update endpoints to accept and persist tags",
+                                                       "Update frontend TypeScript types in frontend/src/types/index.ts to include new fields",
+                                                       "Python imports succeed: python -c \u0027from app.models.schemas import NotebookResponse\u0027",
+                                                       "TypeScript compilation passes: cd frontend \u0026\u0026 npx tsc --noEmit"
+                                                   ],
+                            "priority":  1,
+                            "passes":  true,
+                            "notes":  "Schema extended with tags, title, pinned. ChatMessage model added."
+                        },
+                        {
+                            "id":  "US-002",
+                            "title":  "Create global search index in ChromaDB",
+                            "description":  "As a developer, I need a global ChromaDB collection indexing documents across all notebooks for cross-notebook search functionality.",
+                            "acceptanceCriteria":  [
+                                                       "Create global_search ChromaDB collection in backend/app/database.py on app startup",
+                                                       "Add documents to global index on upload with notebook_id metadata",
+                                                       "Remove documents from global index when deleted",
+                                                       "Add startup migration that re-indexes all existing documents into global_search",
+                                                       "Python imports succeed and app starts without errors"
+                                                   ],
+                            "priority":  2,
+                            "passes":  true,
+                            "notes":  "Global search index with startup migration, add/remove on document upload/delete"
+                        },
+                        {
+                            "id":  "US-003",
+                            "title":  "Tag management API endpoints",
+                            "description":  "As a frontend developer, I need CRUD API endpoints for notebook tags so users can create, list, filter, and delete tags.",
+                            "acceptanceCriteria":  [
+                                                       "PATCH /api/notebooks/{id} accepts tags in request body and persists to metadata",
+                                                       "GET /api/notebooks supports ?tag=xxx query param to filter by tag",
+                                                       "GET /api/tags returns deduplicated list of all unique tags across all notebooks",
+                                                       "DELETE /api/tags/{name} removes the specified tag from all notebooks",
+                                                       "Each endpoint returns proper error responses for invalid input (400) and not found (404)",
+                                                       "Tags persist across app restarts"
+                                                   ],
+                            "priority":  3,
+                            "passes":  true,
+                            "notes":  "Tag filtering, list tags, and delete tag endpoints added to notebooks router"
+                        },
+                        {
+                            "id":  "US-004",
+                            "title":  "Global search API endpoint",
+                            "description":  "As a frontend developer, I need an API that searches across all notebooks and returns results with notebook context.",
+                            "acceptanceCriteria":  [
+                                                       "GET /api/search?q=xxx queries the global_search ChromaDB collection",
+                                                       "Each result includes: snippet, source, notebook_id, notebook_name",
+                                                       "Results deduplicated by chunk content",
+                                                       "Returns empty array when query is empty or no results found",
+                                                       "Response time under 2 seconds"
+                                                   ],
+                            "priority":  4,
+                            "passes":  true,
+                            "notes":  "SearchResult schema, query_global() in database.py, search router registered"
+                        },
+                        {
+                            "id":  "US-005",
+                            "title":  "Export conversation API",
+                            "description":  "As a frontend developer, I need an API that exports a notebook conversation history as formatted Markdown for download.",
+                            "acceptanceCriteria":  [
+                                                       "GET /api/chat/export/{notebook_id} returns Markdown string with all messages",
+                                                       "Markdown includes: notebook name as title, date, role labels, citations as footnotes",
+                                                       "Response header Content-Disposition: attachment",
+                                                       "Returns 404 if notebook has no conversations",
+                                                       "Backend starts without errors"
+                                                   ],
+                            "priority":  5,
+                            "passes":  true,
+                            "notes":  ""
+                        },
+                        {
+                            "id":  "US-006",
+                            "title":  "Export notebook API (ZIP package)",
+                            "description":  "As a user, I want to export an entire notebook as a downloadable ZIP package containing documents, conversations, and metadata.",
+                            "acceptanceCriteria":  [
+                                                       "GET /api/notebooks/{id}/export returns a ZIP file via StreamingResponse",
+                                                       "ZIP contains: README.md, conversation.md, metadata.json, documents/ folder",
+                                                       "Use Python zipfile stdlib, no temp files on disk",
+                                                       "Proper Content-Disposition header",
+                                                       "Returns 404 if notebook not found"
+                                                   ],
+                            "priority":  6,
+                            "passes":  true,
+                            "notes":  ""
+                        },
+                        {
+                            "id":  "US-007",
+                            "title":  "Suggested questions API",
+                            "description":  "As a frontend developer, I need a configurable API that uses LLM to generate relevant starter questions based on notebook documents.",
+                            "acceptanceCriteria":  [
+                                                       "POST /api/chat/suggested-questions accepts {notebook_id} and returns 3-5 questions",
+                                                       "Questions are contextually relevant to uploaded documents",
+                                                       "Returns generic starter questions when no documents uploaded",
+                                                       "Accepts optional count param (default 4, min 1, max 8)",
+                                                       "Backend starts without errors"
+                                                   ],
+                            "priority":  7,
+                            "passes":  true,
+                            "notes":  ""
+                        },
+                        {
+                            "id":  "US-008",
+                            "title":  "Summary generation API (document + notebook)",
+                            "description":  "As a frontend developer, I need APIs to generate document-level and notebook-level summaries using LLM with caching.",
+                            "acceptanceCriteria":  [
+                                                       "POST /api/documents/{doc_id}/summarize generates summary of a single document",
+                                                       "POST /api/notebooks/{notebook_id}/summarize generates overview of all documents",
+                                                       "Both endpoints cache summaries and return cached version if exists",
+                                                       "Cache invalidated when document content changes",
+                                                       "Returns proper error when not found (404)"
+                                                   ],
+                            "priority":  8,
+                            "passes":  false,
+                            "notes":  ""
+                        },
+                        {
+                            "id":  "US-009",
+                            "title":  "Auto-generate conversation titles",
+                            "description":  "As a developer, I need the backend to auto-generate a title for each conversation from the first user message.",
+                            "acceptanceCriteria":  [
+                                                       "When first user message is sent, backend auto-generates a title",
+                                                       "Default: smart truncation of first 50 chars at word boundary",
+                                                       "Title stored in conversation metadata",
+                                                       "PATCH /api/notebooks/{id}/conversation/{conv_id}/title allows manual edit",
+                                                       "Backend starts without errors"
+                                                   ],
+                            "priority":  9,
+                            "passes":  false,
+                            "notes":  ""
+                        },
+                        {
+                            "id":  "US-010",
+                            "title":  "Tag management UI in sidebar",
+                            "description":  "As a user, I want to see, add, and filter tags on notebooks in the sidebar so I can organize my work.",
+                            "acceptanceCriteria":  [
+                                                       "Each notebook shows tags as colored chips below its name",
+                                                       "Add tag with inline input and autocomplete from existing tags",
+                                                       "Click tag chip to filter sidebar to notebooks with that tag",
+                                                       "Clear filter with x button or All Notebooks option",
+                                                       "Empty state when no notebooks match selected tag",
+                                                       "TypeScript compilation passes"
+                                                   ],
+                            "priority":  10,
+                            "passes":  false,
+                            "notes":  ""
+                        },
+                        {
+                            "id":  "US-011",
+                            "title":  "Global search UI with keyboard shortcut",
+                            "description":  "As a user, I want a Ctrl+K search bar that finds content across all my notebooks.",
+                            "acceptanceCriteria":  [
+                                                       "Search bar triggered by Ctrl+K keyboard shortcut",
+                                                       "Debounced search (300ms) against GET /api/search",
+                                                       "Results show: snippet, document name, notebook name",
+                                                       "Clicking result navigates to that notebook",
+                                                       "Loading spinner and no results empty state",
+                                                       "TypeScript compilation passes"
+                                                   ],
+                            "priority":  11,
+                            "passes":  false,
+                            "notes":  ""
+                        },
+                        {
+                            "id":  "US-012",
+                            "title":  "Export conversation button in ChatPanel",
+                            "description":  "As a user, I want to export the current conversation as Markdown with one click.",
+                            "acceptanceCriteria":  [
+                                                       "Export button (download icon) in ChatPanel header",
+                                                       "Click triggers download of Markdown file",
+                                                       "Toast notification on success and error",
+                                                       "Button disabled when conversation is empty",
+                                                       "TypeScript compilation passes"
+                                                   ],
+                            "priority":  12,
+                            "passes":  false,
+                            "notes":  ""
+                        },
+                        {
+                            "id":  "US-013",
+                            "title":  "Export notebook button in Sidebar",
+                            "description":  "As a user, I want to export an entire notebook as a ZIP package from the sidebar.",
+                            "acceptanceCriteria":  [
+                                                       "Export option in notebook context menu",
+                                                       "Click triggers download of ZIP file",
+                                                       "Toast notification with progress and success/error states",
+                                                       "TypeScript compilation passes"
+                                                   ],
+                            "priority":  13,
+                            "passes":  false,
+                            "notes":  ""
+                        },
+                        {
+                            "id":  "US-014",
+                            "title":  "Suggested questions panel in chat area",
+                            "description":  "As a user, I want to see AI-generated suggested questions when I open a notebook.",
+                            "acceptanceCriteria":  [
+                                                       "Show suggested questions as clickable chips when chat is empty",
+                                                       "Clicking a question sends it as user message",
+                                                       "Questions disappear after first message sent",
+                                                       "Refresh button to regenerate questions",
+                                                       "Loading skeleton while generating",
+                                                       "TypeScript compilation passes"
+                                                   ],
+                            "priority":  14,
+                            "passes":  false,
+                            "notes":  ""
+                        },
+                        {
+                            "id":  "US-015",
+                            "title":  "Summary display cards for documents and notebooks",
+                            "description":  "As a user, I want to see AI-generated summaries for documents and notebook overviews.",
+                            "acceptanceCriteria":  [
+                                                       "Expandable summary section on each document in SourcePanel",
+                                                       "Notebook summary card in chat area when empty",
+                                                       "Generate Summary button with loading state",
+                                                       "Summary persists on revisit (cached)",
+                                                       "Regenerate button to refresh",
+                                                       "TypeScript compilation passes"
+                                                   ],
+                            "priority":  15,
+                            "passes":  false,
+                            "notes":  ""
+                        },
+                        {
+                            "id":  "US-016",
+                            "title":  "Conversation history panel with auto-titles",
+                            "description":  "As a user, I want to see my conversation history with auto-generated titles and switch between conversations.",
+                            "acceptanceCriteria":  [
+                                                       "Conversation history panel showing past conversations with titles",
+                                                       "Each entry shows title, date, message count",
+                                                       "Click to switch conversation, current one highlighted",
+                                                       "Pin/unpin and delete buttons on each conversation",
+                                                       "New Conversation button to start fresh",
+                                                       "Empty state for no conversations",
+                                                       "TypeScript compilation passes"
+                                                   ],
+                            "priority":  16,
+                            "passes":  false,
+                            "notes":  ""
+                        },
+                        {
+                            "id":  "US-017",
+                            "title":  "Keyboard shortcuts system",
+                            "description":  "As a power user, I want keyboard shortcuts for common actions.",
+                            "acceptanceCriteria":  [
+                                                       "Ctrl+K: Open global search",
+                                                       "Ctrl+J: New conversation",
+                                                       "Ctrl+E: Export current conversation",
+                                                       "Ctrl+N: New notebook",
+                                                       "Ctrl+,: Open settings",
+                                                       "?: Show keyboard shortcuts help dialog",
+                                                       "Shortcuts not active when typing in input/textarea",
+                                                       "TypeScript compilation passes"
+                                                   ],
+                            "priority":  17,
+                            "passes":  false,
+                            "notes":  ""
+                        },
+                        {
+                            "id":  "US-018",
+                            "title":  "Settings panel — AI feature toggles",
+                            "description":  "As a user, I want to enable/disable LLM-powered features to control API costs.",
+                            "acceptanceCriteria":  [
+                                                       "New AI Features section in SettingsDialog",
+                                                       "Toggles for: Suggested Questions, Auto Summaries, Smart Titles",
+                                                       "Toggles saved to localStorage",
+                                                       "UI respects toggle state without page refresh",
+                                                       "Each toggle shows estimated token cost",
+                                                       "Existing settings continue to work unchanged",
+                                                       "TypeScript compilation passes"
+                                                   ],
+                            "priority":  18,
+                            "passes":  false,
+                            "notes":  ""
+                        }
+                    ]
 }

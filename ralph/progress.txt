@@ -71,3 +71,35 @@ Started: Thu Jun 11 14:16:16     2026
   - Notebook name lookup reads `notebooks_meta.json` directly instead of importing from notebooks router
   - `PlainTextResponse` with `text/markdown` media type and `Content-Disposition: attachment` triggers download
 ---
+
+## 2026-06-11 ~15:30 UTC - US-006
+- Added `GET /api/notebooks/{notebook_id}/export` endpoint returning a ZIP file via StreamingResponse
+- ZIP contains: README.md (overview table), conversation.md, metadata.json, and documents/ folder with original files
+- Built entirely in memory using `io.BytesIO` + `zipfile.ZipFile` — no temp files on disk
+- Added `_build_export_conversation_md()` helper (same pattern as chat.py US-005 export, reused locally)
+- Added `_build_export_readme()` helper generating a markdown overview table with counts and tags
+- ZIP entries wrapped in a `{safe_name}/` prefix folder, using `zipfile.ZIP_DEFLATED` compression
+- Returns 404 if notebook not found, proper `Content-Disposition: attachment` header
+- Files changed: `backend/app/routers/notebooks.py`
+- **Learnings for future iterations:**
+  - StreamingResponse with BytesIO generator works for in-memory ZIP delivery — wrote to BytesIO, seek(0), then yielded chunks
+  - The `_build_export_conversation_md()` helper duplicates chat.py's export pattern; could be extracted to a shared utility if needed by more endpoints
+  - PowerShell jq has issues with hyphens in string literals on Windows — use PowerShell's ConvertFrom-Json/ConvertTo-Json for PRD updates instead
+  - This story is purely backend — no frontend changes (US-013 will add the UI button)
+---
+
+## 2026-06-11 ~16:00 UTC - US-007
+- Added `SuggestedQuestionsRequest` and `SuggestedQuestionsResponse` Pydantic models in schemas.py
+- Added `POST /api/chat/suggested-questions` endpoint with count validation (default 4, range 1-8)
+- Added `_generate_suggested_questions()` async helper with layered fallback strategy:
+  - Uses generic probe embedding ("key concepts main ideas overview...") to find representative chunks
+  - Falls back to `GENERIC_QUESTIONS` (8 hardcoded questions) when: no documents, no embeddings, no LLM configured, or LLM API failure
+  - LLM prompt generates exactly `count` questions from document context, strips numbering/bullets, pads with generics if short
+- Endpoint returns 404 for non-existent notebooks via existing `_notebook_exists()` helper
+- Files changed: `backend/app/models/schemas.py`, `backend/app/routers/chat.py`
+- **Learnings for future iterations:**
+  - The `_generate_suggested_questions` helper uses lazy imports (`from app.services.embedder import embed_query`) inside the function body to avoid circular imports — a pattern already used elsewhere in the codebase
+  - The codebase consistently declares `async def` even for functions that only contain blocking calls (OpenAI, ChromaDB) — follow this convention for consistency
+  - `Count` parameter validation uses Pydantic's `Field(ge=1, le=8)` which handles 400 errors automatically before the handler runs
+  - For PRD updates, use PowerShell's `ConvertFrom-Json`/`ConvertTo-Json` cycle; avoid `jq` on Windows due to hyphen-in-literal issues
+---
