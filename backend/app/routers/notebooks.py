@@ -1,9 +1,12 @@
+import io
 import os
 import json
 import uuid
 import glob
+import zipfile
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 from app.models.schemas import (
     NotebookCreate,
@@ -68,6 +71,105 @@ def _save_notes(notebook_id: str, notes: list[dict]):
 
 def _now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def _build_export_conversation_md(notebook_name: str, conversations: list[dict]) -> str:
+    """Build a Markdown representation of the notebook's conversation history."""
+    if not conversations:
+        return f"# {notebook_name}\n\nNo conversations yet.\n"
+
+    export_date = _now()
+    lines = [
+        f"# {notebook_name}",
+        "",
+        f"**Exported:** {export_date}",
+        "",
+        "---",
+        "",
+        "## Conversation",
+        "",
+    ]
+
+    citation_index = 0
+    footnotes: list[str] = []
+
+    for msg in conversations:
+        role = msg.get("role", "unknown")
+        content = msg.get("content", "")
+        timestamp = msg.get("timestamp", "")
+        citations = msg.get("citations", [])
+
+        if role == "user":
+            lines.append(f"### 👤 User — {timestamp}")
+        elif role == "assistant":
+            lines.append(f"### 🤖 Assistant — {timestamp}")
+        else:
+            lines.append(f"### {role.capitalize()} — {timestamp}")
+
+        lines.append("")
+        lines.append(content)
+        lines.append("")
+
+        if citations:
+            lines.append("**Citations:**")
+            for cit in citations:
+                citation_index += 1
+                source = cit.get("source", "unknown")
+                page = cit.get("page")
+                snippet = cit.get("snippet", "")
+                page_info = f" (page {page})" if page is not None else ""
+                footnote = f"[^{citation_index}]: {source}{page_info} — _{snippet}_"
+                footnotes.append(footnote)
+                lines.append(f"  [^{citation_index}] {source}{page_info}")
+            lines.append("")
+
+        lines.append("---")
+        lines.append("")
+
+    if footnotes:
+        lines.append("## Citation Details")
+        lines.append("")
+        for fn in footnotes:
+            lines.append(fn)
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _build_export_readme(notebook_name: str, metadata: dict) -> str:
+    """Build a README.md overview for the notebook export."""
+    doc_count = metadata.get("document_count", 0)
+    msg_count = metadata.get("conversation_message_count", 0)
+    note_count = metadata.get("note_count", 0)
+    tags = metadata.get("tags", [])
+    exported_at = metadata.get("exported_at", "")
+    created_at = metadata.get("created_at", "")
+
+    tag_list = ", ".join(f"`{t}`" for t in tags) if tags else "None"
+
+    lines = [
+        f"# {notebook_name}",
+        "",
+        f"Exported from **Notelm** on {exported_at}.",
+        "",
+        "## Overview",
+        "",
+        f"| Property | Value |",
+        f"|----------|-------|",
+        f"| Created | {created_at} |",
+        f"| Tags | {tag_list} |",
+        f"| Documents | {doc_count} |",
+        f"| Conversation Messages | {msg_count} |",
+        f"| Notes | {note_count} |",
+        "",
+        "## Contents",
+        "",
+        "- `conversation.md` — Full conversation history with citations",
+        "- `metadata.json` — Notebook metadata in JSON format",
+        "- `documents/` — Original uploaded documents",
+        "",
+    ]
+    return "\n".join(lines)
 
 
 @router.get("/notebooks", response_model=list[NotebookResponse])
@@ -167,6 +269,83 @@ async def delete_notebook(notebook_id: str):
         os.remove(conv_file)
 
     return {"ok": True, "removed_documents": removed_count}
+
+
+@router.get("/notebooks/{notebook_id}/export")
+async def export_notebook(notebook_id: str):
+    """Export an entire notebook as a downloadable ZIP package.
+
+    The ZIP contains README.md, conversation.md, metadata.json, and all
+    uploaded documents in a documents/ subfolder. Built entirely in memory
+    without touching the disk.
+    """
+    meta = _load_meta()
+    if notebook_id not in meta:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+
+    nb = meta[notebook_id]
+    notebook_name = nb.get("name", "Untitled")
+    safe_name = notebook_name.replace(" ", "_")
+
+    doc_meta = _load_doc_meta()
+    nb_docs = {
+        doc_id: doc
+        for doc_id, doc in doc_meta.items()
+        if doc.get("notebook_id") == notebook_id
+    }
+
+    conv_file = os.path.join(settings.data_dir, "conversations", f"{notebook_id}.json")
+    conversations: list[dict] = []
+    if os.path.exists(conv_file):
+        with open(conv_file, "r", encoding="utf-8") as f:
+            conversations = json.load(f)
+
+    notes = _load_notes(notebook_id)
+    now = _now()
+
+    export_metadata = {
+        "notebook_id": notebook_id,
+        "name": notebook_name,
+        "tags": nb.get("tags", []),
+        "created_at": nb.get("created_at"),
+        "updated_at": nb.get("updated_at"),
+        "exported_at": now,
+        "document_count": len(nb_docs),
+        "conversation_message_count": len(conversations),
+        "note_count": len(notes),
+    }
+
+    conv_md = _build_export_conversation_md(notebook_name, conversations)
+    readme = _build_export_readme(notebook_name, export_metadata)
+
+    buf = io.BytesIO()
+    prefix = f"{safe_name}/"
+
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(f"{prefix}README.md", readme)
+        zf.writestr(f"{prefix}metadata.json", json.dumps(export_metadata, indent=2, ensure_ascii=False))
+        zf.writestr(f"{prefix}conversation.md", conv_md)
+
+        for doc_id, doc in nb_docs.items():
+            filepath = doc.get("filepath", "")
+            filename = doc.get("filename", doc_id)
+            if filepath and os.path.exists(filepath):
+                zf.write(filepath, f"{prefix}documents/{filename}")
+
+    buf.seek(0)
+
+    def iter_zip():
+        while True:
+            chunk = buf.read(8192)
+            if not chunk:
+                break
+            yield chunk
+
+    return StreamingResponse(
+        iter_zip(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}.zip"'},
+    )
 
 
 @router.get("/tags")
