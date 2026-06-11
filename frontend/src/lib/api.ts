@@ -1,4 +1,4 @@
-import type { Notebook, Document, ChatResponse, Citation, Note, SearchResult, SuggestedQuestionsResponse } from "@/types"
+import type { Notebook, Document, ChatResponse, Citation, Note, SearchResult, SuggestedQuestionsResponse, DocumentSummaryResponse, NotebookSummaryResponse } from "@/types"
 
 const BASE = "/api"
 
@@ -215,6 +215,17 @@ export const api = {
   },
 
   search: (q: string) => request<SearchResult[]>(`/search?q=${encodeURIComponent(q)}`),
+
+  summaries: {
+    document: (docId: string) =>
+      request<DocumentSummaryResponse>(`/documents/${docId}/summarize`, {
+        method: "POST",
+      }),
+    notebook: (notebookId: string) =>
+      request<NotebookSummaryResponse>(`/notebooks/${notebookId}/summarize`, {
+        method: "POST",
+      }),
+  },
 
   health: {
     check: () => request<{

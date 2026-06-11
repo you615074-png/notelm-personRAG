@@ -63,3 +63,15 @@ export interface SearchResult {
 export interface SuggestedQuestionsResponse {
   questions: string[]
 }
+
+export interface DocumentSummaryResponse {
+  doc_id: string
+  summary: string
+  cached: boolean
+}
+
+export interface NotebookSummaryResponse {
+  notebook_id: string
+  summary: string
+  cached: boolean
+}

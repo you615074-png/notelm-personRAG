@@ -5,6 +5,7 @@ import type { ChatMessage, Citation } from "@/types"
 import { api } from "@/lib/api"
 import NoteEditor from "./NoteEditor"
 import SuggestedQuestions from "./SuggestedQuestions"
+import NotebookSummary from "./NotebookSummary"
 import { useToast } from "./Toast"
 
 interface Props {
@@ -253,6 +254,7 @@ export default function ChatPanel({ notebookId }: Props) {
       <div className="flex-1 overflow-y-auto px-6 py-4">
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center">
+            <NotebookSummary notebookId={notebookId} />
             <SuggestedQuestions
               notebookId={notebookId}
               onSelect={(question) => send(question)}
