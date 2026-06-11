@@ -48,6 +48,25 @@ export const api = {
       }),
     delete: (id: string) =>
       request<void>(`/notebooks/${id}`, { method: "DELETE" }),
+    export: async (id: string) => {
+      const res = await fetch(`${BASE}/notebooks/${id}/export`)
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
+        throw new Error(err.detail || `HTTP ${res.status}`)
+      }
+      const blob = await res.blob()
+      const disposition = res.headers.get("Content-Disposition") || ""
+      const filenameMatch = disposition.match(/filename="?(.+?)"?$/)
+      const filename = filenameMatch ? filenameMatch[1].replace(/"/g, "") : `notebook_${id}.zip`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    },
   },
 
   tags: {

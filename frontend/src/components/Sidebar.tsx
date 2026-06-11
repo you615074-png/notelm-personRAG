@@ -45,6 +45,8 @@ export default function Sidebar() {
   const { toast } = useToast()
   const tagInputRef = useRef<HTMLInputElement>(null)
   const pendingSuggestionRef = useRef(false)
+  const [contextMenuFor, setContextMenuFor] = useState<string | null>(null)
+  const contextMenuRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(() => {
     api.notebooks.list().then(setNotebooks).catch((e) => console.error("Failed to load notebooks:", e))
@@ -64,6 +66,17 @@ export default function Sidebar() {
       tagInputRef.current.focus()
     }
   }, [addingTagFor])
+
+  useEffect(() => {
+    if (!contextMenuFor) return
+    const handleClick = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenuFor(null)
+      }
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [contextMenuFor])
 
   const tagSuggestions = useMemo(() => {
     if (!tagInput.trim()) return []
@@ -163,6 +176,16 @@ export default function Sidebar() {
     pendingSuggestionRef.current = false
   }
 
+  async function handleExportNotebook(id: string) {
+    try {
+      await api.notebooks.export(id)
+      toast("笔记本已导出", "success")
+    } catch (e: unknown) {
+      toast(safeError(e), "error")
+    }
+    setContextMenuFor(null)
+  }
+
   function handleTagInputBlur(notebookId: string) {
     setTimeout(() => {
       if (pendingSuggestionRef.current) {
@@ -225,21 +248,60 @@ export default function Sidebar() {
           const isAddingTag = addingTagFor === nb.id
           return (
             <div key={nb.id} className="mb-0.5">
-              <Link
-                href={`/notebook/${nb.id}`}
-                className={`flex items-center gap-2.5 px-3 py-2 text-apple-caption transition-colors ${
-                  active
-                    ? "bg-primary/8 text-primary font-semibold"
-                    : "text-ink hover:bg-hairline-soft"
-                }`}
-                style={{ borderRadius: 8 }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0">
-                  <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" />
-                  <path d="M8 8h8M8 12h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                <span className="truncate">{nb.name}</span>
-              </Link>
+              <div className="flex items-center relative group">
+                <Link
+                  href={`/notebook/${nb.id}`}
+                  className={`flex items-center gap-2.5 px-3 py-2 text-apple-caption transition-colors flex-1 min-w-0 ${
+                    active
+                      ? "bg-primary/8 text-primary font-semibold"
+                      : "text-ink hover:bg-hairline-soft"
+                  }`}
+                  style={{ borderRadius: 8 }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0">
+                    <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                    <path d="M8 8h8M8 12h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                  <span className="truncate">{nb.name}</span>
+                </Link>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setContextMenuFor(contextMenuFor === nb.id ? null : nb.id)
+                  }}
+                  className={`shrink-0 mr-1 p-1 text-ink-muted hover:text-ink hover:bg-hairline-soft transition-colors rounded-md ${
+                    contextMenuFor === nb.id ? "bg-hairline-soft text-ink" : ""
+                  }`}
+                  title="笔记本操作"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <circle cx="8" cy="3" r="1.25" fill="currentColor" />
+                    <circle cx="8" cy="8" r="1.25" fill="currentColor" />
+                    <circle cx="8" cy="13" r="1.25" fill="currentColor" />
+                  </svg>
+                </button>
+                {contextMenuFor === nb.id && (
+                  <div
+                    ref={contextMenuRef}
+                    className="absolute right-1 top-full mt-0.5 z-30 bg-white dark:bg-[#2c2c2e]
+                      border border-hairline rounded-lg shadow-lg overflow-hidden min-w-[140px] py-1"
+                  >
+                    <button
+                      onClick={() => handleExportNotebook(nb.id)}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 text-apple-fine text-ink
+                        hover:bg-hairline-soft transition-colors text-left"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M7 10l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M12 15V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      导出笔记本
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* Tag chips */}
               <div className="flex flex-wrap items-center gap-1 px-3 pb-1.5">
