@@ -1,4 +1,4 @@
-import type { Notebook, Document, ChatResponse, Citation, Note } from "@/types"
+import type { Notebook, Document, ChatResponse, Citation, Note, SearchResult } from "@/types"
 
 const BASE = "/api"
 
@@ -168,6 +168,8 @@ export const api = {
     delete: (notebookId: string, noteId: string) =>
       request<void>(`/notes/${notebookId}/${noteId}`, { method: "DELETE" }),
   },
+
+  search: (q: string) => request<SearchResult[]>(`/search?q=${encodeURIComponent(q)}`),
 
   health: {
     check: () => request<{

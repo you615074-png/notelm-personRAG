@@ -52,3 +52,10 @@ export interface ConversationMeta {
   pinned: boolean
   created_at: string
 }
+
+export interface SearchResult {
+  snippet: string
+  source: string
+  notebook_id: string
+  notebook_name: string
+}
