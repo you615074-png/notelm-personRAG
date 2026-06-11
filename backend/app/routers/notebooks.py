@@ -71,15 +71,18 @@ def _now():
 
 
 @router.get("/notebooks", response_model=list[NotebookResponse])
-async def list_notebooks():
+async def list_notebooks(tag: str = None):
     meta = _load_meta()
     notebooks = []
     for nb_id, nb_data in meta.items():
+        nb_tags = nb_data.get("tags", [])
+        if tag and tag not in nb_tags:
+            continue
         notebooks.append(
             NotebookResponse(
                 id=nb_id,
                 name=nb_data["name"],
-                tags=nb_data.get("tags", []),
+                tags=nb_tags,
                 created_at=nb_data["created_at"],
                 updated_at=nb_data["updated_at"],
             )
@@ -160,6 +163,37 @@ async def delete_notebook(notebook_id: str):
         os.remove(notes_file)
 
     return {"ok": True, "removed_documents": removed_count}
+
+
+@router.get("/tags")
+async def list_tags():
+    """Return deduplicated sorted list of all unique tags across all notebooks."""
+    meta = _load_meta()
+    all_tags = set()
+    for nb_data in meta.values():
+        for t in nb_data.get("tags", []):
+            if t and t.strip():
+                all_tags.add(t.strip())
+    return sorted(all_tags)
+
+
+@router.delete("/tags/{name}")
+async def delete_tag(name: str):
+    """Remove the specified tag from all notebooks."""
+    if not name or not name.strip():
+        raise HTTPException(status_code=400, detail="Tag name cannot be empty")
+    name = name.strip()
+    meta = _load_meta()
+    removed_from = 0
+    for nb_id, nb_data in meta.items():
+        tags = nb_data.get("tags", [])
+        if name in tags:
+            meta[nb_id]["tags"] = [t for t in tags if t != name]
+            meta[nb_id]["updated_at"] = _now()
+            removed_from += 1
+    if removed_from > 0:
+        _save_meta(meta)
+    return {"ok": True, "removed_from": removed_from}
 
 
 @router.get("/notes/{notebook_id}", response_model=list[NoteResponse])
