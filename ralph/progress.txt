@@ -1,297 +1,67 @@
-# Ralph Progress Log
-Started: Thu Jun 11 14:16:16     2026
+
+## 2026-06-11 ~20:30 UTC - US-016
+- Created `frontend/src/lib/conversations.ts` — localStorage-based multi-conversation management library:
+  - `loadConversations()` / `saveConversations()` — metadata store `conv_meta_{notebookId}` with conversations map + activeConvId
+  - `loadMessages()` / `saveMessages()` — per-conversation messages at `chat_history_{notebookId}_{convId}`
+  - Auto-migration from old flat format (`chat_history_{notebookId}`) on first load — creates a conversation from existing messages, deletes old key
+  - `createConversation()`, `deleteConversation()`, `updateConversationTitle()`, `toggleConversationPin()`
+  - `generateTitle()` — smart truncation at word boundary (mirrors backend logic)
+  - `toConversationList()` — sorted array with pinned-first ordering
+  - `clearAllConversations()` — cleanup on notebook deletion
+- Added `api.chat.sync()` and `api.chat.updateTitle()` frontend API methods (backend endpoints already existed from US-005/US-009)
+- Created `frontend/src/components/ConversationHistory.tsx`:
+  - Narrow panel (w-56) listing all conversations for the current notebook
+  - Each entry shows title (truncated), formatted date (Today=time, This year=MM/DD, Older=YYYY/MM/DD), message count
+  - Active conversation highlighted with left border + primary background tint
+  - Pin/unpin button with SVG icon (filled when pinned), re-sorts pinned to top
+  - Rename via inline edit input on edit button click (Enter to save, Escape to cancel, blur to save)
+  - Delete button with confirmation dialog
+  - "New Conversation" button in header (+ icon)
+  - Empty state with message bubble icon and guidance text
+  - Hover reveal for action buttons (always visible when pinned)
+- Refactored `frontend/src/components/ChatPanel.tsx`:
+  - Added `convId: string | null` and `onConvCreated?: (convId: string) => void` props
+  - Messages loaded/saved per-conversation via `loadMessages(notebookId, convId)` / `saveMessages(notebookId, convId, msgs)`
+  - `ensureConvId()` auto-creates a conversation when user sends first message with no active convId
+  - `convAutoCreatedRef` prevents useEffect from overwriting in-flight messages with localStorage on auto-create
+  - Auto-generates title from first user message via `generateTitle()` on first exchange completion
+  - Clear confirmation now clears only the current conversation's messages
+- Updated `frontend/src/app/notebook/[id]/page.tsx`:
+  - Manages `convId` and `conversations` state alongside notebook/documents
+  - `refreshConversations()` loads from localStorage, converts to sorted list
+  - Handlers: `handleSelectConv`, `handleNewConv`, `handleDeleteConv`, `handleTogglePin`, `handleRenameConv`, `handleConvCreated`
+  - Delete notebook now calls `clearAllConversations(id)` alongside existing localStorage cleanup
+  - Renders ConversationHistory between SourcePanel (w-72) and ChatPanel (flex-1)
+- Files changed: `frontend/src/lib/conversations.ts` (new), `frontend/src/lib/api.ts`, `frontend/src/components/ConversationHistory.tsx` (new), `frontend/src/components/ChatPanel.tsx`, `frontend/src/app/notebook/[id]/page.tsx`
+- **Learnings for future iterations:**
+  - When auto-creating a conversation mid-send (from `ensureConvId`), the `onConvCreated` callback causes a parent re-render which triggers ChatPanel's `useEffect([notebookId, convId])` to reload messages from localStorage — use a ref guard (`convAutoCreatedRef`) to skip this first effect fire, otherwise the in-flight assistant placeholder message gets overwritten
+  - Conversation metadata and messages are stored in separate localStorage keys: `conv_meta_{id}` for metadata (conversations map + activeConvId) and `chat_history_{id}_{convId}` for messages — this avoids loading all messages when only metadata is needed
+  - The auto-migration from old flat format checks for `chat_history_{id}` (old key without convId suffix) on first load; after migration, the old key is deleted to avoid double-migration
+  - `toConversationList()` converts the store's Record<string, ConvMetaEntry> to a sorted ConversationMeta[] array — pinned items first, then by created_at descending — this is called after every CRUD operation via `refreshConversations()`
+  - The backend sync endpoint (`POST /api/chat/sync`) and title update endpoint (`PATCH /api/notebooks/{id}/conversation/{conv_id}/title`) already exist from US-005/US-009 — this story only adds the frontend API wrappers; full backend sync integration is left for a future story
+  - The `api.chat.updateTitle()` endpoint URL uses `/notebooks/{notebookId}/conversation/{convId}/title` — the `request<T>` helper prepends `/api`, matching the backend's `conv_router` prefix `/api/notebooks`
 ---
 
-## Codebase Patterns
-- Notebook metadata stored in `notebooks_meta.json` via `_load_meta()` / `_save_meta()` helpers in `backend/app/routers/notebooks.py`
-- Use `from __future__ import annotations` in schemas when adding forward-referencing types
-- Always use `.get("key", default)` when reading optional fields from JSON metadata to remain backward-compatible with older records
-- Frontend TypeScript types mirror backend Pydantic schemas in `frontend/src/types/index.ts`
-- Python import test: `python -c "from app.models.schemas import NotebookResponse, ChatMessage"` from the `backend/` directory
-- TypeScript check: `npx tsc --noEmit` from the `frontend/` directory (with `npm install` first if node_modules missing)
-- File download from API: use raw `fetch()` + `res.blob()` (NOT `request<T>()` which calls `res.json()`); parse Content-Disposition header for filename; trigger download via URL.createObjectURL → anchor.click → URL.revokeObjectURL
-
-## 2026-06-11 14:20 UTC - US-001
-- Added `tags: list[str]` to NotebookCreate, NotebookUpdate, NotebookResponse in `backend/app/models/schemas.py`
-- Added `title: Optional[str]` and `pinned: bool` to ChatRequest in schemas.py
-- Created `ChatMessage` Pydantic model with id, role, content, citations, timestamp, title, pinned
-- Updated notebook create/update/get/list endpoints to persist and return tags
-- Updated frontend `Notebook` interface with `tags: string[]` and `ChatMessage` with `title?/pinned?`
-- Files changed: `backend/app/models/schemas.py`, `backend/app/routers/notebooks.py`, `frontend/src/types/index.ts`
+## 2026-06-11 ~21:00 UTC - US-017
+- Created `frontend/src/components/ShortcutsHelpDialog.tsx` — modal dialog showing all 6 keyboard shortcuts with styled `<kbd>` chips:
+  - Each entry shows description, scope (全局/笔记本), and key combo
+  - Escape key closes the dialog, backdrop click closes the dialog
+  - Footer explains shortcuts don't fire when typing in input/textarea
+- Created `frontend/src/components/KeyboardShortcuts.tsx` — central global keyboard shortcut handler:
+  - Rendered in root layout so shortcuts are always active
+  - Skips when focus is in INPUT/TEXTAREA elements (same guard as SearchDialog)
+  - Dispatches CustomEvents for component-specific actions: `notelm:new-notebook`, `notelm:open-settings`, `notelm:new-conversation`, `notelm:export-conversation`
+  - Toggles ShortcutsHelpDialog on `?` keypress
+  - Does NOT handle Ctrl+K — SearchDialog manages its own listener
+- Updated `frontend/src/app/layout.tsx` — imports and renders `<KeyboardShortcuts />`
+- Updated `frontend/src/components/Sidebar.tsx` — listens for `notelm:new-notebook` (calls create()) and `notelm:open-settings` (opens SettingsDialog)
+- Updated `frontend/src/components/ChatPanel.tsx` — listens for `notelm:export-conversation` with ref-based guards for hasMessages and notebookId to avoid stale closures
+- Updated `frontend/src/app/notebook/[id]/page.tsx` — listens for `notelm:new-conversation` to trigger handleNewConv()
+- Files changed: `frontend/src/components/ShortcutsHelpDialog.tsx` (new), `frontend/src/components/KeyboardShortcuts.tsx` (new), `frontend/src/app/layout.tsx`, `frontend/src/app/notebook/[id]/page.tsx`, `frontend/src/components/ChatPanel.tsx`, `frontend/src/components/Sidebar.tsx`
 - **Learnings for future iterations:**
-  - The notebook metadata is stored in a plain JSON file (`notebooks_meta.json`), not in a database. Use `.get()` with defaults when reading to maintain backward compat.
-  - `from __future__ import annotations` needed for forward references like `ChatMessage.citations: list[ChatCitation]`
-  - Python's `python` command is at the system path but needs `sys.path.insert(0, '.')` or running from `backend/` directory
-  - Frontend needs `npm install` before first `tsc` run — node_modules not committed to repo
----
-
-## 2026-06-11 14:45 UTC - US-003
-- Modified `list_notebooks()` to accept optional `?tag=xxx` query param and filter results
-- Added `GET /api/tags` endpoint returning deduplicated sorted list of all unique tags
-- Added `DELETE /api/tags/{name}` endpoint removing tag from all notebooks with 400 on empty name
-- Files changed: `backend/app/routers/notebooks.py`
-- **Learnings for future iterations:**
-  - Tags are stored in `notebooks_meta.json` alongside notebook metadata — no separate storage
-  - Use `_load_meta()` / `_save_meta()` helpers for all notebook metadata operations
-  - Tag filtering uses exact match (`tag in nb_tags`), not substring or case-insensitive
-  - The `DELETE /api/tags/{name}` endpoint is idempotent — returns success even if tag not found on any notebook
-  - Route order matters in FastAPI: `/api/tags` (static) must not conflict with `/api/notebooks/{id}` (parameterized)
-  - Python import check requires full path to python.exe when multiple Python installations exist on Windows
-- Use `py` (Python launcher) instead of `python` on Windows — `python` may be a Windows App execution alias that fails with exit code 49
-- ChromaDB global_search collection stores notebook_id and notebook_name in chunk metadata alongside document-level metadata (source, filename, doc_id)
-- New routers need three changes: create router file, import in main.py, add app.include_router()
----
-
-## 2026-06-11 ~15:00 UTC - US-004
-- Added `SearchResult` Pydantic model with snippet, source, notebook_id, notebook_name in schemas.py
-- Added `query_global()` function to database.py following the existing `query_chunks()` pattern
-- Created `backend/app/routers/search.py` with `GET /api/search?q=xxx` endpoint
-- Registered search router in main.py
-- Endpoint: embeds query → queries global_search ChromaDB collection → deduplicates by snippet → returns SearchResult list
-- Returns empty array when query is empty or no results found
-- Files changed: `backend/app/models/schemas.py`, `backend/app/database.py`, `backend/app/routers/search.py` (new), `backend/app/main.py`
-- **Learnings for future iterations:**
-  - The `global_search` collection was already being populated (via `add_to_global_index()` in document upload/URL fetch) and cleaned up (via `remove_from_global_index()` on document delete) but had no query endpoint until now
-  - Chunk metadata in global_search includes both document-level fields (source, filename, doc_id) and notebook-level fields (notebook_id, notebook_name) injected by `add_to_global_index()`
-  - When querying ChromaDB collections, always check `col.count() == 0` first to avoid errors on empty collections
-  - Use `py` instead of `python` for Python commands on Windows — see Codebase Patterns
----
-
-## 2026-06-11 ~15:15 UTC - US-005
-- Added `ConversationSyncRequest` Pydantic model in schemas.py (notebook_id + list[ChatMessage])
-- Added conversation storage helpers `_load_conversations()` / `_save_conversations()` in chat.py, storing to `data/conversations/{notebook_id}.json`
-- Added `POST /api/chat/sync` endpoint to persist conversation messages from frontend
-- Added `GET /api/chat/export/{notebook_id}` endpoint returning Markdown with notebook name, export date, role-labelled messages with citations as footnotes, Content-Disposition: attachment
-- Added notebook existence validation in sync endpoint (404 if notebook not found)
-- Added conversation file cleanup in `delete_notebook()` in notebooks.py
-- Files changed: `backend/app/models/schemas.py`, `backend/app/routers/chat.py`, `backend/app/routers/notebooks.py`
-- **Learnings for future iterations:**
-  - Conversations are stored in `data/conversations/{notebook_id}.json` — same file-per-notebook pattern as notes
-  - Export Markdown uses `[^n]` footnote syntax (both body reference and definition must have `^` for proper linking)
-  - Avoid importing private helpers across router modules — inline the lookup or use a shared utility
-  - Notebook name lookup reads `notebooks_meta.json` directly instead of importing from notebooks router
-  - `PlainTextResponse` with `text/markdown` media type and `Content-Disposition: attachment` triggers download
----
-
-## 2026-06-11 ~15:30 UTC - US-006
-- Added `GET /api/notebooks/{notebook_id}/export` endpoint returning a ZIP file via StreamingResponse
-- ZIP contains: README.md (overview table), conversation.md, metadata.json, and documents/ folder with original files
-- Built entirely in memory using `io.BytesIO` + `zipfile.ZipFile` — no temp files on disk
-- Added `_build_export_conversation_md()` helper (same pattern as chat.py US-005 export, reused locally)
-- Added `_build_export_readme()` helper generating a markdown overview table with counts and tags
-- ZIP entries wrapped in a `{safe_name}/` prefix folder, using `zipfile.ZIP_DEFLATED` compression
-- Returns 404 if notebook not found, proper `Content-Disposition: attachment` header
-- Files changed: `backend/app/routers/notebooks.py`
-- **Learnings for future iterations:**
-  - StreamingResponse with BytesIO generator works for in-memory ZIP delivery — wrote to BytesIO, seek(0), then yielded chunks
-  - The `_build_export_conversation_md()` helper duplicates chat.py's export pattern; could be extracted to a shared utility if needed by more endpoints
-  - PowerShell jq has issues with hyphens in string literals on Windows — use PowerShell's ConvertFrom-Json/ConvertTo-Json for PRD updates instead
-  - This story is purely backend — no frontend changes (US-013 will add the UI button)
----
-
-## 2026-06-11 ~16:00 UTC - US-007
-- Added `SuggestedQuestionsRequest` and `SuggestedQuestionsResponse` Pydantic models in schemas.py
-- Added `POST /api/chat/suggested-questions` endpoint with count validation (default 4, range 1-8)
-- Added `_generate_suggested_questions()` async helper with layered fallback strategy:
-  - Uses generic probe embedding ("key concepts main ideas overview...") to find representative chunks
-  - Falls back to `GENERIC_QUESTIONS` (8 hardcoded questions) when: no documents, no embeddings, no LLM configured, or LLM API failure
-  - LLM prompt generates exactly `count` questions from document context, strips numbering/bullets, pads with generics if short
-- Endpoint returns 404 for non-existent notebooks via existing `_notebook_exists()` helper
-- Files changed: `backend/app/models/schemas.py`, `backend/app/routers/chat.py`
-- **Learnings for future iterations:**
-  - The `_generate_suggested_questions` helper uses lazy imports (`from app.services.embedder import embed_query`) inside the function body to avoid circular imports — a pattern already used elsewhere in the codebase
-  - The codebase consistently declares `async def` even for functions that only contain blocking calls (OpenAI, ChromaDB) — follow this convention for consistency
-  - `Count` parameter validation uses Pydantic's `Field(ge=1, le=8)` which handles 400 errors automatically before the handler runs
-  - For PRD updates, use PowerShell's `ConvertFrom-Json`/`ConvertTo-Json` cycle; avoid `jq` on Windows due to hyphen-in-literal issues
----
-
-## 2026-06-11 ~16:30 UTC - US-008
-- Added `DocumentSummaryResponse` and `NotebookSummaryResponse` Pydantic models in schemas.py
-- Created `backend/app/routers/summaries.py` with two endpoints:
-  - `POST /api/documents/{doc_id}/summarize` — generates summary for single document from all its chunks
-  - `POST /api/notebooks/{notebook_id}/summarize` — generates notebook overview using probe-query chunk retrieval
-- Implemented content-hash caching: SHA-256 hash of chunk texts stored alongside summary in `data/summaries/`; cache hit returned with `cached: true`, cache miss regenerates via LLM and stores new hash
-- Cache auto-invalidates when document content changes (hash mismatch detected)
-- LLM prompt uses low temperature (0.3) for factual summaries with 800 max tokens
-- Graceful fallback when LLM is not configured: returns first 300 chars of context as preview
-- Uses probe embedding ("key concepts main ideas…") with `query_chunks(top_k=8)` for representative notebook overview context
-- Proper error responses: 404 for not-found documents/notebooks, 400 for empty content
-- Registered router in main.py
-- Files changed: `backend/app/models/schemas.py`, `backend/app/routers/summaries.py` (new), `backend/app/main.py`
-- **Learnings for future iterations:**
-  - ChromaDB `col.get(where={"doc_id": doc_id})` retrieves all chunks for a document — no dedicated database.py helper needed
-  - Content-hash caching pattern: compute hash over sorted chunks → store with summary → compare on next request
-  - The `_notebook_exists()` helper is duplicated across multiple routers (chat.py, summaries.py); could be extracted to shared utilities in a future refactor
-  - Lazy imports inside endpoint bodies avoid circular import issues between routers and database module
-  - Both endpoints use POST (not GET) per the spec, which is slightly unconventional but matches the generative nature of the operation
----
-
-## 2026-06-11 ~17:00 UTC - US-009
-- Added `UpdateConversationTitleRequest` and `ConversationMeta` Pydantic models in schemas.py
-- Added conversation metadata storage in `data/conversations_meta/{notebook_id}.json` via `_load_conv_meta()` / `_save_conv_meta()` helpers in chat.py
-- Added `_generate_title()` helper: smart truncation of first 50 chars at word boundary, appending "…" if truncated
-- Modified `POST /api/chat/sync` endpoint to auto-generate a conversation title from the first user message when no metadata exists yet, returning conversation metadata alongside the sync response
-- Added `PATCH /api/notebooks/{notebook_id}/conversation/{conv_id}/title` endpoint via a secondary `conv_router` in chat.py for manual title editing
-- Updated `delete_notebook()` in notebooks.py to clean up `conversations_meta/{id}.json` alongside existing cleanup
-- Registered `chat.conv_router` in main.py
-- Added `ConversationMeta` TypeScript interface in frontend/src/types/index.ts
-- Conversation metadata file format: `{"conversations": {"<conv_uuid>": {"title": "...", "pinned": false, "created_at": "..."}}}`
-- Files changed: `backend/app/models/schemas.py`, `backend/app/routers/chat.py`, `backend/app/routers/notebooks.py`, `backend/app/main.py`, `frontend/src/types/index.ts`
-- **Learnings for future iterations:**
-  - A conversation's conv_id is a UUID generated by the backend on first sync — the frontend receives it in the sync response for later use
-  - The `conv_router` uses `/api/notebooks` prefix (separate from the main chat router's `/api/chat` prefix) to match the PATCH endpoint URL structure
-  - Conversation metadata and messages are stored separately: messages in `data/conversations/{id}.json`, metadata in `data/conversations_meta/{id}.json`
-  - Smart truncation at word boundary uses `str.rfind(" ")` within the first `max_chars` characters
-  - The title generation is idempotent — if conversation metadata already exists, no new title is generated
----
-
-## 2026-06-11 ~17:30 UTC - US-010
-- Added tag API methods in `frontend/src/lib/api.ts`:
-  - Updated `notebooks.update()` to accept `{ name?, tags? }` instead of just name string
-  - Added `tags.list()` calling `GET /api/tags` for autocomplete
-  - Added `tags.delete(name)` calling `DELETE /api/tags/{name}` for future tag management
-- Rewrote `frontend/src/components/Sidebar.tsx` with full tag management UI:
-  - Tag chips rendered below each notebook name with deterministic colors (hash-based, 8 palettes with dark mode support)
-  - Inline tag input per notebook with autocomplete dropdown from existing tags
-  - Keyboard navigation (ArrowDown/Up, Enter, Escape) on tag input
-  - Clicking a tag chip filters sidebar to notebooks containing that tag
-  - Filter bar showing active tag + count + clear (x) button
-  - Clicking the active filter tag again clears the filter
-  - Empty state: "没有笔记本包含标签" with "显示全部笔记本" button
-  - Remove tag button (x) on each chip with stopPropagation
-  - Add tag button (+) at end of each notebook's chip row
-- Updated `frontend/src/app/notebook/[id]/page.tsx` to use new `api.notebooks.update(id, { name })` signature
-- Files changed: `frontend/src/lib/api.ts`, `frontend/src/components/Sidebar.tsx`, `frontend/src/app/notebook/[id]/page.tsx`
-- **Learnings for future iterations:**
-  - When autocomplete calls `setState` + function that reads same state, pass the value explicitly to avoid stale closure — React batches state updates asynchronously
-  - The `api.notebooks.update()` now uses an object parameter `{ name?, tags? }` — all callers must be updated to pass `{ name: ... }` instead of bare string
-  - Tag colors use a deterministic hash (`((hash << 5) - hash + charCode) | 0`) to ensure the same tag always gets the same color across renders
-  - CSS approach: use `dark:` Tailwind variants for dark mode — arbitrary hex values like `dark:bg-[#3a3a3c]` work but prefer semantic tokens like `bg-surface-canvas` when available
-  - The `tags` API namespace is separate from `notebooks` — tags have their own `GET /api/tags` list and `DELETE /api/tags/{name}` bulk-delete endpoints
-  - Sidebar state for tags is local to Sidebar component (no global store) — consistent with existing pattern; window focus event triggers reload
----
-
-## 2026-06-11 ~18:00 UTC - US-011
-- Added `SearchResult` interface to `frontend/src/types/index.ts` matching backend schema (snippet, source, notebook_id, notebook_name)
-- Added `api.search(q)` method in `frontend/src/lib/api.ts` calling `GET /api/search?q=`
-- Created `frontend/src/components/SearchDialog.tsx` with:
-  - Global Ctrl+K keyboard shortcut (skips when focus is in INPUT/TEXTAREA)
-  - Debounced search (300ms) using useRef for timer cleanup
-  - Loading spinner (animated SVG) and "未找到结果" empty state
-  - Results with snippet, source filename, notebook name, and line-clamp-2 truncation
-  - Arrow key navigation (Up/Down) with selected highlight (bg-primary/8)
-  - Enter to navigate, Escape to close, backdrop click to close
-  - ESC badge in search bar for discoverability
-  - Dark mode support (dark:bg-[#2c2c2e])
-- Added `<SearchDialog />` to root layout in `frontend/src/app/layout.tsx`
-- Files changed: `frontend/src/types/index.ts`, `frontend/src/lib/api.ts`, `frontend/src/components/SearchDialog.tsx` (new), `frontend/src/app/layout.tsx`
-- **Learnings for future iterations:**
-  - Use `openRef` pattern for Escape key handler to avoid stale closure in global event listener
-  - Ctrl+K check must skip when `document.activeElement` is INPUT/TEXTAREA — check `e.target.tagName`
-  - The `api.search()` method follows the same `request<T>()` pattern as all other API methods
-  - Search dialog is a self-contained client component — just drop it in the layout, no props or context needed
-  - For the `selectedIndex`, reset to 0 when query or results change to avoid out-of-bounds
-  - The `.line-clamp-2` Tailwind utility works for snippet truncation (requires Tailwind v3.3+)
----
-
-## 2026-06-11 ~18:30 UTC - US-012
-- Added `api.chat.export()` method in `frontend/src/lib/api.ts`:
-  - Raw fetch to `GET /api/chat/export/{notebook_id}` (not JSON — blob response)
-  - Parses Content-Disposition header for filename
-  - Triggers browser download via `URL.createObjectURL` + anchor click + `URL.revokeObjectURL`
-  - Throws on non-OK responses for error toast
-- Added export button (download SVG icon) in ChatPanel header alongside "清空" button:
-  - Conditionally rendered only when `messages.length > 0` (same as clear button)
-  - Calls `api.chat.export(notebookId)` on click
-  - Toast notification: "对话已导出" on success, error message on failure
-  - Imported `useToast` from `./Toast`
-- Files changed: `frontend/src/lib/api.ts`, `frontend/src/components/ChatPanel.tsx`
-- **Learnings for future iterations:**
-  - File download responses use raw `fetch()` + `res.blob()`, NOT the `request<T>()` helper which always calls `res.json()`
-  - Browser file download: createObjectURL → create anchor → click → remove anchor → revokeObjectURL
-  - The Content-Disposition header from backend looks like `attachment; filename="xxx.md"` — parse with regex
-  - Toast hook is already available globally via `ToastProvider` in root layout — just import `useToast` and destructure `{ toast }`
-  - This is the first file-download pattern in the frontend; US-013 (notebook ZIP export) will reuse the same pattern
----
-
-## 2026-06-11 ~19:00 UTC - US-013
-- Added `api.notebooks.export(id)` method in `frontend/src/lib/api.ts`:
-  - Raw fetch to `GET /api/notebooks/{id}/export` (blob response — NOT JSON)
-  - Parses Content-Disposition header for filename (default fallback: `notebook_{id}.zip`)
-  - Triggers browser download via URL.createObjectURL → anchor.click → revokeObjectURL
-  - Follows the same pattern established in US-012 for `api.chat.export()`
-- Added context menu (three-dot "..." button) to each notebook row in Sidebar.tsx:
-  - Click toggles a dropdown menu positioned below the button
-  - Click-outside detection via `mousedown` event listener with ref check
-  - Menu contains "导出笔记本" option with download icon
-  - Toast notification: "笔记本已导出" on success, error message on failure
-  - Three-dot button: `shrink-0 mr-1` with vertical dots SVG icon, highlights when menu open
-- Files changed: `frontend/src/lib/api.ts`, `frontend/src/components/Sidebar.tsx`
-- **Learnings for future iterations:**
-  - The notebooks export ZIP endpoint was already built in US-006 (`GET /api/notebooks/{id}/export`) — this story only adds the frontend trigger
-  - Context menu dropdown uses `position: absolute` relative to a `position: relative` parent row with `z-30` to stay above content
-  - Click-outside pattern: `mousedown` listener on document, check `ref.current.contains(e.target)`, clean up in useEffect return
-  - The "..." button must use `e.preventDefault()` + `e.stopPropagation()` to avoid Link navigation when toggling the menu
-  - The three-dot icon uses three `<circle>` elements (not lines) for a cleaner look at small sizes
-  - The `contextMenuFor` state stores the notebook ID whose menu is open — setting to `null` closes all menus
----
-
-## 2026-06-11 ~19:30 UTC - US-014
-- Added `SuggestedQuestionsResponse` interface in `frontend/src/types/index.ts`
-- Added `api.chat.suggestedQuestions(notebookId, count?)` method in `frontend/src/lib/api.ts` calling `POST /api/chat/suggested-questions`
-- Created `frontend/src/components/SuggestedQuestions.tsx` with:
-  - Loading skeleton (4 animate-pulse bars with staggered widths) for initial load
-  - Error state with retry button
-  - Question chips as clickable pill buttons with hover transitions
-  - Refresh button (rotate SVG icon) to regenerate questions without flashing skeleton
-  - Empty state: renders null when no questions returned
-  - Uses `refreshing` state to distinguish initial load from refresh — preserves existing questions during refresh
-- Integrated into `ChatPanel.tsx`:
-  - Replaced static empty-state placeholder with `<SuggestedQuestions>` when `messages.length === 0`
-  - Refactored `send()` to accept optional `text?: string` parameter — clicking a suggested question passes the question text directly
-  - Send button and Enter key handler call `send()` without args (reads from input state)
-- Added `SuggestedQuestionsResponse` to `@/types` import in api.ts
-- Files changed: `frontend/src/types/index.ts`, `frontend/src/lib/api.ts`, `frontend/src/components/SuggestedQuestions.tsx` (new), `frontend/src/components/ChatPanel.tsx`
-- **Learnings for future iterations:**
-  - When adding an optional parameter to an existing function that's used as an `onClick` handler, wrap with an arrow function to avoid TypeScript type mismatch (MouseEvent vs custom param type)
-  - The `SuggestedQuestions` backend endpoint was already built in US-007 (`POST /api/chat/suggested-questions`) — this story only adds the frontend UI
-  - Use `setRefreshing` (separate from `setLoading`) when refreshing visible content to avoid replacing UI with skeleton mid-interaction
-  - Question chips use `rounded-full` pill style with `bg-surface-canvas border border-hairline` — consistent with tag chip styling in Sidebar
-  - The `onSelect` callback pattern allows the parent (ChatPanel) to handle the action without the child needing knowledge of the chat send flow
----
-
-## 2026-06-11 ~20:00 UTC - US-015
-- Added `DocumentSummaryResponse` and `NotebookSummaryResponse` TypeScript interfaces in `frontend/src/types/index.ts`
-- Added `api.summaries.document(docId)` and `api.summaries.notebook(notebookId)` methods in `frontend/src/lib/api.ts` calling POST endpoints
-- Created `frontend/src/components/DocumentSummary.tsx`:
-  - Expandable per-document summary section with initial "生成摘要" button
-  - Loading skeleton with spinner + animated placeholder bars
-  - Error state with retry button
-  - Summary display with "已缓存" badge when returned from backend cache
-  - Regenerate button (rotate SVG icon) to refresh via new API call
-  - Uses `generated` state to distinguish first generation from subsequent loads
-- Created `frontend/src/components/NotebookSummary.tsx`:
-  - Card layout with header ("笔记本摘要") and content area inside `.card` container
-  - Initial "生成摘要" button state when no summary generated yet
-  - Loading skeleton with spinner in header + animated placeholder bars
-  - Error state with retry button
-  - Summary text display with "已缓存" badge
-  - Regenerate button with text "重新生成" and animated spinner SVG while regenerating
-  - Separate `regenerating` state to avoid flashing skeleton during refresh
-- Updated `frontend/src/components/SourcePanel.tsx`:
-  - Added `expandedDocId` state to track which document summary is expanded
-  - Added chevron toggle button on each document row (revealed on hover, rotates 180° when expanded)
-  - Wrapped each document row in a container div with conditional `<DocumentSummary>` below when expanded
-  - Imported `useState` and `DocumentSummary`
-- Updated `frontend/src/components/ChatPanel.tsx`:
-  - Added `<NotebookSummary>` above `<SuggestedQuestions>` in the empty chat state
-  - Imported `NotebookSummary`
-- Files changed: `frontend/src/types/index.ts`, `frontend/src/lib/api.ts`, `frontend/src/components/DocumentSummary.tsx` (new), `frontend/src/components/NotebookSummary.tsx` (new), `frontend/src/components/SourcePanel.tsx`, `frontend/src/components/ChatPanel.tsx`
-- **Learnings for future iterations:**
-  - The summaries backend endpoints were already built in US-008 (`POST /api/documents/{doc_id}/summarize` and `POST /api/notebooks/{notebook_id}/summarize`) — this story only adds the frontend UI
-  - Summary responses include a `cached: boolean` flag from backend — use this to conditionally show the "已缓存" badge
-  - When a component has two loading modes (initial load vs refresh), use separate state variables (`loading` vs `regenerating`) to prevent UI flicker
-  - The expand/collapse pattern in SourcePanel uses a single `expandedDocId` state — setting it to a doc ID expands that one, setting to `null` collapses all; clicking the same doc again collapses it
-  - The chevron toggle uses `e.stopPropagation()` to avoid triggering both the expand toggle AND the `onSelectDoc` callback
-  - Unicode emoji in source files: when the Read tool shows surrogates, the actual file may contain literal emoji characters — use Write (not Edit) when exact match is tricky
+  - Custom DOM events (`window.dispatchEvent(new CustomEvent(...))`) are the right pattern for global keyboard shortcuts that need to trigger actions in deeply nested components — avoids prop drilling or context
+  - When a custom event handler in a useEffect needs to read the latest props/state, use refs (`useRef`) and update their `.current` on every render — the `[]` dependency array keeps the listener stable while refs provide fresh values
+  - SearchDialog already had Ctrl+K with proper focus guard — extracting it into the central KeyboardShortcuts component would have required SearchDialog's open state to be lifted up; leaving it in-place was cleaner
+  - The `?` shortcut is intentionally NOT gated behind Ctrl — just pressing `?` opens the help dialog (like Slack, VSCode, and most modern apps); this is safe because it skips when focus is in INPUT/TEXTAREA
+  - The app's Sidebar is always rendered in the root layout, so `notelm:new-notebook` and `notelm:open-settings` dispatch works globally; notebook-specific events (`notelm:new-conversation`, `notelm:export-conversation`) are only handled when the notebook page is mounted, which is the correct behavior
 ---
