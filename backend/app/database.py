@@ -139,6 +139,33 @@ def add_to_global_index(notebook_id: str, notebook_name: str, chunks: list[dict]
     col.add(ids=ids, documents=documents, metadatas=metadatas, embeddings=embeddings)
 
 
+def query_global(
+    query_embedding: list[float],
+    top_k: int = 10,
+) -> list[dict]:
+    """Query the global_search collection across all notebooks."""
+    col = get_global_collection()
+    if col.count() == 0:
+        return []
+    results = col.query(
+        query_embeddings=[query_embedding],
+        n_results=min(top_k, col.count()),
+        include=["documents", "metadatas", "distances"],
+    )
+    items = []
+    if results["ids"] and results["ids"][0]:
+        for i in range(len(results["ids"][0])):
+            items.append(
+                {
+                    "id": results["ids"][0][i],
+                    "text": results["documents"][0][i],
+                    "metadata": results["metadatas"][0][i],
+                    "score": 1.0 - results["distances"][0][i],
+                }
+            )
+    return items
+
+
 def remove_from_global_index(doc_id: str):
     """Remove all chunks for a document from the global search index."""
     col = get_global_collection()

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from app.routers import notebooks, documents, chat
+from app.routers import notebooks, documents, chat, search
 from app.config import get_settings
 from app.database import rebuild_global_index
 
@@ -34,6 +34,7 @@ async def startup():
 app.include_router(notebooks.router)
 app.include_router(documents.router)
 app.include_router(chat.router)
+app.include_router(search.router)
 
 
 @app.get("/api/health")

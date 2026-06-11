@@ -92,6 +92,13 @@ class SettingsUpdate(BaseModel):
     embed_model: Optional[str] = None
 
 
+class SearchResult(BaseModel):
+    snippet: str
+    source: str
+    notebook_id: str
+    notebook_name: str
+
+
 class SettingsResponse(BaseModel):
     llm_base_url: str
     llm_api_key_set: bool
