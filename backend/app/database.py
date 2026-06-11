@@ -1,3 +1,4 @@
+import json
 import os
 import uuid
 from dataclasses import dataclass, field, asdict
@@ -107,3 +108,113 @@ def list_notebook_collections() -> list[str]:
         if c.name.startswith("notebook_"):
             notebook_ids.append(c.name[len("notebook_"):])
     return notebook_ids
+
+
+# ── Global search index ──────────────────────────────────────────────────────
+
+
+def get_global_collection() -> chromadb.Collection:
+    """Get or create the global_search collection for cross-notebook search."""
+    client = get_chroma_client()
+    return client.get_or_create_collection(
+        name="global_search",
+        metadata={"hnsw:space": "cosine"},
+    )
+
+
+def add_to_global_index(notebook_id: str, notebook_name: str, chunks: list[dict]):
+    """Add document chunks to the global search index with notebook metadata."""
+    col = get_global_collection()
+    if not chunks:
+        return
+    ids = [str(uuid.uuid4()) for _ in chunks]
+    documents = [c["text"] for c in chunks]
+    metadatas = []
+    for c in chunks:
+        meta = dict(c["metadata"])
+        meta["notebook_id"] = notebook_id
+        meta["notebook_name"] = notebook_name
+        metadatas.append(meta)
+    embeddings = [c["embedding"] for c in chunks]
+    col.add(ids=ids, documents=documents, metadatas=metadatas, embeddings=embeddings)
+
+
+def remove_from_global_index(doc_id: str):
+    """Remove all chunks for a document from the global search index."""
+    col = get_global_collection()
+    try:
+        results = col.get(where={"doc_id": doc_id})
+        if results["ids"]:
+            col.delete(ids=results["ids"])
+    except Exception:
+        pass
+
+
+def remove_notebook_from_global_index(notebook_id: str):
+    """Remove all chunks for a notebook from the global search index."""
+    col = get_global_collection()
+    try:
+        results = col.get(where={"notebook_id": notebook_id})
+        if results["ids"]:
+            col.delete(ids=results["ids"])
+    except Exception:
+        pass
+
+
+def rebuild_global_index():
+    """Re-index all existing documents into the global_search collection on startup.
+
+    Only runs when the global_search collection is empty (first start or after
+    data loss). Iterates all notebook collections and copies chunks into the
+    global index with notebook_id and notebook_name metadata.
+    """
+    col = get_global_collection()
+    if col.count() > 0:
+        return  # already populated — skip migration
+
+    doc_meta_path = os.path.join(settings.data_dir, "documents_meta.json")
+    if not os.path.exists(doc_meta_path):
+        return
+
+    with open(doc_meta_path, "r", encoding="utf-8") as f:
+        doc_meta = json.load(f)
+
+    if not doc_meta:
+        return
+
+    nb_meta_path = os.path.join(settings.data_dir, "notebooks_meta.json")
+    nb_meta: dict = {}
+    if os.path.exists(nb_meta_path):
+        with open(nb_meta_path, "r", encoding="utf-8") as f:
+            nb_meta = json.load(f)
+
+    for doc_id, doc_info in doc_meta.items():
+        notebook_id = doc_info.get("notebook_id")
+        if not notebook_id:
+            continue
+
+        nb_col = get_or_create_collection(notebook_id)
+        try:
+            results = nb_col.get(
+                where={"doc_id": doc_id},
+                include=["documents", "metadatas", "embeddings"],
+            )
+            if not results["ids"]:
+                continue
+
+            notebook_name = nb_meta.get(notebook_id, {}).get("name", "Unknown")
+            metadatas = []
+            for meta in results["metadatas"]:
+                m = dict(meta)
+                m["notebook_id"] = notebook_id
+                m["notebook_name"] = notebook_name
+                metadatas.append(m)
+
+            col.add(
+                ids=results["ids"],
+                documents=results["documents"],
+                metadatas=metadatas,
+                embeddings=results["embeddings"] if results["embeddings"] else None,
+            )
+        except Exception:
+            pass

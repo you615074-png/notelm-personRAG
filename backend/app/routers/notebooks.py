@@ -13,7 +13,7 @@ from app.models.schemas import (
     NoteResponse,
 )
 from app.config import get_settings
-from app.database import delete_collection
+from app.database import delete_collection, remove_notebook_from_global_index
 
 router = APIRouter(prefix="/api", tags=["notebooks"])
 
@@ -143,6 +143,7 @@ async def delete_notebook(notebook_id: str):
     _save_meta(meta)
 
     delete_collection(notebook_id)
+    remove_notebook_from_global_index(notebook_id)
 
     doc_meta = _load_doc_meta()
     removed_count = 0

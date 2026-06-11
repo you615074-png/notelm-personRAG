@@ -8,12 +8,14 @@ from app.services.parser import parse_file, save_upload, fetch_url_content, dete
 from app.services.chunker import chunk_text
 from app.services.embedder import embed_texts
 from app.database import add_chunks, delete_document_chunks, get_document_chunks_count
+from app.database import add_to_global_index, remove_from_global_index
 from app.config import get_settings
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 settings = get_settings()
 
 META_FILE = os.path.join(settings.data_dir, "documents_meta.json")
+NB_META_FILE = os.path.join(settings.data_dir, "notebooks_meta.json")
 
 
 def _load_meta() -> dict:
@@ -26,6 +28,15 @@ def _load_meta() -> dict:
 def _save_meta(meta: dict):
     with open(META_FILE, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2, ensure_ascii=False)
+
+
+def _get_notebook_name(notebook_id: str) -> str:
+    """Look up a notebook's name from notebooks_meta.json."""
+    if not os.path.exists(NB_META_FILE):
+        return "Unknown"
+    with open(NB_META_FILE, "r", encoding="utf-8") as f:
+        nb_meta = json.load(f)
+    return nb_meta.get(notebook_id, {}).get("name", "Unknown")
 
 
 @router.get("/notebook/{notebook_id}", response_model=list[DocumentResponse])
@@ -86,6 +97,7 @@ async def upload_document(notebook_id: str, file: UploadFile = File(...)):
         c["metadata"]["source_id"] = doc_id
 
     add_chunks(notebook_id, chunks)
+    add_to_global_index(notebook_id, _get_notebook_name(notebook_id), chunks)
 
     meta = _load_meta()
     meta[doc_id] = {
@@ -141,6 +153,7 @@ async def fetch_url(body: WebFetchRequest):
         c["metadata"]["source_id"] = doc_id
 
     add_chunks(body.notebook_id, chunks)
+    add_to_global_index(body.notebook_id, _get_notebook_name(body.notebook_id), chunks)
 
     meta = _load_meta()
     meta[doc_id] = {
@@ -166,6 +179,7 @@ async def fetch_url(body: WebFetchRequest):
 @router.delete("/{notebook_id}/{doc_id}")
 async def delete_document(notebook_id: str, doc_id: str):
     delete_document_chunks(notebook_id, doc_id)
+    remove_from_global_index(doc_id)
     meta = _load_meta()
     if doc_id in meta:
         if "filepath" in meta[doc_id] and os.path.exists(meta[doc_id]["filepath"]):

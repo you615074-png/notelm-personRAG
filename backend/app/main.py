@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from app.routers import notebooks, documents, chat
 from app.config import get_settings
+from app.database import rebuild_global_index
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,6 +20,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.on_event("startup")
+async def startup():
+    logger.info("Running global search index migration…")
+    try:
+        rebuild_global_index()
+        logger.info("Global search index migration complete")
+    except Exception as e:
+        logger.error(f"Global search index migration failed: {e}")
+
 
 app.include_router(notebooks.router)
 app.include_router(documents.router)
