@@ -23,3 +23,35 @@ Started: Thu Jun 11 14:16:16     2026
   - Python's `python` command is at the system path but needs `sys.path.insert(0, '.')` or running from `backend/` directory
   - Frontend needs `npm install` before first `tsc` run — node_modules not committed to repo
 ---
+
+## 2026-06-11 14:45 UTC - US-003
+- Modified `list_notebooks()` to accept optional `?tag=xxx` query param and filter results
+- Added `GET /api/tags` endpoint returning deduplicated sorted list of all unique tags
+- Added `DELETE /api/tags/{name}` endpoint removing tag from all notebooks with 400 on empty name
+- Files changed: `backend/app/routers/notebooks.py`
+- **Learnings for future iterations:**
+  - Tags are stored in `notebooks_meta.json` alongside notebook metadata — no separate storage
+  - Use `_load_meta()` / `_save_meta()` helpers for all notebook metadata operations
+  - Tag filtering uses exact match (`tag in nb_tags`), not substring or case-insensitive
+  - The `DELETE /api/tags/{name}` endpoint is idempotent — returns success even if tag not found on any notebook
+  - Route order matters in FastAPI: `/api/tags` (static) must not conflict with `/api/notebooks/{id}` (parameterized)
+  - Python import check requires full path to python.exe when multiple Python installations exist on Windows
+- Use `py` (Python launcher) instead of `python` on Windows — `python` may be a Windows App execution alias that fails with exit code 49
+- ChromaDB global_search collection stores notebook_id and notebook_name in chunk metadata alongside document-level metadata (source, filename, doc_id)
+- New routers need three changes: create router file, import in main.py, add app.include_router()
+---
+
+## 2026-06-11 ~15:00 UTC - US-004
+- Added `SearchResult` Pydantic model with snippet, source, notebook_id, notebook_name in schemas.py
+- Added `query_global()` function to database.py following the existing `query_chunks()` pattern
+- Created `backend/app/routers/search.py` with `GET /api/search?q=xxx` endpoint
+- Registered search router in main.py
+- Endpoint: embeds query → queries global_search ChromaDB collection → deduplicates by snippet → returns SearchResult list
+- Returns empty array when query is empty or no results found
+- Files changed: `backend/app/models/schemas.py`, `backend/app/database.py`, `backend/app/routers/search.py` (new), `backend/app/main.py`
+- **Learnings for future iterations:**
+  - The `global_search` collection was already being populated (via `add_to_global_index()` in document upload/URL fetch) and cleaned up (via `remove_from_global_index()` on document delete) but had no query endpoint until now
+  - Chunk metadata in global_search includes both document-level fields (source, filename, doc_id) and notebook-level fields (notebook_id, notebook_name) injected by `add_to_global_index()`
+  - When querying ChromaDB collections, always check `col.count() == 0` first to avoid errors on empty collections
+  - Use `py` instead of `python` for Python commands on Windows — see Codebase Patterns
+---

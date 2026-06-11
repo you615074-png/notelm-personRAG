@@ -47,8 +47,8 @@
         "Tags persist across app restarts"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Tag filtering, list tags, and delete tag endpoints added to notebooks router"
     },
     {
       "id": "US-004",
@@ -62,8 +62,8 @@
         "Response time under 2 seconds"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "SearchResult schema, query_global() in database.py, search router registered"
     },
     {
       "id": "US-005",
