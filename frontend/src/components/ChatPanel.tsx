@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import type { ChatMessage, Citation } from "@/types"
 import { api } from "@/lib/api"
 import NoteEditor from "./NoteEditor"
+import { useToast } from "./Toast"
 
 interface Props {
   notebookId: string
@@ -120,6 +121,7 @@ export default function ChatPanel({ notebookId }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const pendingCitationsRef = useRef<Citation[]>([])
+  const { toast } = useToast()
 
   const scrollDown = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -206,6 +208,15 @@ export default function ChatPanel({ notebookId }: Props) {
     setShowClearConfirm(false)
   }
 
+  async function handleExport() {
+    try {
+      await api.chat.export(notebookId)
+      toast("对话已导出", "success")
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "导出失败", "error")
+    }
+  }
+
   function saveToNote(msg: ChatMessage) {
     setNoteContent(msg.content)
     setShowNoteEditor(true)
@@ -223,9 +234,18 @@ export default function ChatPanel({ notebookId }: Props) {
       <div className="px-6 py-3 border-b border-hairline flex items-center justify-between">
         <h3 className="text-apple-caption font-semibold text-ink">对话</h3>
         {messages.length > 0 && (
-          <button onClick={handleClear} className="text-apple-fine text-ink-secondary hover:text-red-500 btn-ghost">
-            清空
-          </button>
+          <div className="flex items-center gap-1">
+            <button onClick={handleExport} className="text-apple-fine text-ink-secondary hover:text-primary btn-ghost p-1" title="导出对话">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M7 10l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M12 15V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <button onClick={handleClear} className="text-apple-fine text-ink-secondary hover:text-red-500 btn-ghost">
+              清空
+            </button>
+          </div>
         )}
       </div>
 

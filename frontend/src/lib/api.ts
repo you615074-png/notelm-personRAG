@@ -92,6 +92,26 @@ export const api = {
         body: JSON.stringify({ notebook_id: notebookId, message, top_k: topK, chat_history: chatHistory }),
       }),
 
+    export: async (notebookId: string) => {
+        const res = await fetch(`${BASE}/chat/export/${notebookId}`)
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
+          throw new Error(err.detail || `HTTP ${res.status}`)
+        }
+        const blob = await res.blob()
+        const disposition = res.headers.get("Content-Disposition") || ""
+        const filenameMatch = disposition.match(/filename="?(.+?)"?$/)
+        const filename = filenameMatch ? filenameMatch[1].replace(/"/g, "") : `conversation_${notebookId}.md`
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      },
+
     stream: (
       notebookId: string,
       message: string,
