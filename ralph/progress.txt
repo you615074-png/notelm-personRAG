@@ -1,0 +1,25 @@
+# Ralph Progress Log
+Started: Thu Jun 11 14:16:16     2026
+---
+
+## Codebase Patterns
+- Notebook metadata stored in `notebooks_meta.json` via `_load_meta()` / `_save_meta()` helpers in `backend/app/routers/notebooks.py`
+- Use `from __future__ import annotations` in schemas when adding forward-referencing types
+- Always use `.get("key", default)` when reading optional fields from JSON metadata to remain backward-compatible with older records
+- Frontend TypeScript types mirror backend Pydantic schemas in `frontend/src/types/index.ts`
+- Python import test: `python -c "from app.models.schemas import NotebookResponse, ChatMessage"` from the `backend/` directory
+- TypeScript check: `npx tsc --noEmit` from the `frontend/` directory (with `npm install` first if node_modules missing)
+
+## 2026-06-11 14:20 UTC - US-001
+- Added `tags: list[str]` to NotebookCreate, NotebookUpdate, NotebookResponse in `backend/app/models/schemas.py`
+- Added `title: Optional[str]` and `pinned: bool` to ChatRequest in schemas.py
+- Created `ChatMessage` Pydantic model with id, role, content, citations, timestamp, title, pinned
+- Updated notebook create/update/get/list endpoints to persist and return tags
+- Updated frontend `Notebook` interface with `tags: string[]` and `ChatMessage` with `title?/pinned?`
+- Files changed: `backend/app/models/schemas.py`, `backend/app/routers/notebooks.py`, `frontend/src/types/index.ts`
+- **Learnings for future iterations:**
+  - The notebook metadata is stored in a plain JSON file (`notebooks_meta.json`), not in a database. Use `.get()` with defaults when reading to maintain backward compat.
+  - `from __future__ import annotations` needed for forward references like `ChatMessage.citations: list[ChatCitation]`
+  - Python's `python` command is at the system path but needs `sys.path.insert(0, '.')` or running from `backend/` directory
+  - Frontend needs `npm install` before first `tsc` run — node_modules not committed to repo
+---
