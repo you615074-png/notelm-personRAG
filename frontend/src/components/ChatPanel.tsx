@@ -10,6 +10,7 @@ import {
   generateTitle,
   updateConversationTitle,
 } from "@/lib/conversations"
+import { isFeatureEnabled, AI_FEATURE_KEYS } from "@/lib/ai-features"
 import NoteEditor from "./NoteEditor"
 import SuggestedQuestions from "./SuggestedQuestions"
 import NotebookSummary from "./NotebookSummary"
@@ -226,10 +227,12 @@ export default function ChatPanel({ notebookId, convId, onConvCreated }: Props) 
           saveMessages(notebookId, activeConvId, final)
 
           // Auto-update title from first user message after first exchange completes
-          const userMsgs = final.filter((m) => m.role === "user")
-          if (userMsgs.length === 1 && userMsgs[0].content === msgText) {
-            const autoTitle = generateTitle(msgText)
-            updateConversationTitle(notebookId, activeConvId, autoTitle)
+          if (isFeatureEnabled(AI_FEATURE_KEYS.smartTitles)) {
+            const userMsgs = final.filter((m) => m.role === "user")
+            if (userMsgs.length === 1 && userMsgs[0].content === msgText) {
+              const autoTitle = generateTitle(msgText)
+              updateConversationTitle(notebookId, activeConvId, autoTitle)
+            }
           }
 
           return final
@@ -307,11 +310,15 @@ export default function ChatPanel({ notebookId, convId, onConvCreated }: Props) 
       <div className="flex-1 overflow-y-auto px-6 py-4">
         {showEmptyState && (
           <div className="h-full flex flex-col items-center justify-center">
-            <NotebookSummary notebookId={notebookId} />
-            <SuggestedQuestions
-              notebookId={notebookId}
-              onSelect={(question) => send(question)}
-            />
+            {isFeatureEnabled(AI_FEATURE_KEYS.autoSummaries) && (
+              <NotebookSummary notebookId={notebookId} />
+            )}
+            {isFeatureEnabled(AI_FEATURE_KEYS.suggestedQuestions) && (
+              <SuggestedQuestions
+                notebookId={notebookId}
+                onSelect={(question) => send(question)}
+              />
+            )}
           </div>
         )}
         {messages.map((msg) => (

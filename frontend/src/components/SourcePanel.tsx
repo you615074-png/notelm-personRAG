@@ -6,6 +6,7 @@ import UploadZone from "./UploadZone"
 import DocumentSummary from "./DocumentSummary"
 import { api } from "@/lib/api"
 import { useToast } from "./Toast"
+import { isFeatureEnabled, AI_FEATURE_KEYS } from "@/lib/ai-features"
 
 interface Props {
   notebookId: string
@@ -83,7 +84,7 @@ export default function SourcePanel({ notebookId, documents, onRefresh, onSelect
                 </svg>
               </button>
             </div>
-            {expandedDocId === doc.id && (
+            {expandedDocId === doc.id && isFeatureEnabled(AI_FEATURE_KEYS.autoSummaries) && (
               <DocumentSummary docId={doc.id} fileName={doc.filename} />
             )}
           </div>

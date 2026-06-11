@@ -3,9 +3,41 @@
 import { useState } from "react"
 import { api } from "@/lib/api"
 import { useToast } from "./Toast"
+import {
+  AI_FEATURE_KEYS,
+  type AIFeatureKey,
+  AI_FEATURE_LABELS,
+  AI_FEATURE_DESCRIPTIONS,
+  AI_FEATURE_TOKEN_COST,
+  isFeatureEnabled,
+  setFeatureEnabled,
+} from "@/lib/ai-features"
 
 interface Props {
   onClose: () => void
+}
+
+function ToggleSwitch({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      onClick={() => onChange(!enabled)}
+      className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors"
+      style={{ background: enabled ? "#0071e3" : "rgba(120,120,128,0.3)" }}
+    >
+      <span
+        className="inline-block h-4.5 w-4.5 rounded-full bg-white shadow transition-transform"
+        style={{
+          width: 18,
+          height: 18,
+          transform: enabled ? "translateX(22px)" : "translateX(2px)",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.16)",
+        }}
+      />
+    </button>
+  )
 }
 
 export default function SettingsDialog({ onClose }: Props) {
@@ -18,6 +50,18 @@ export default function SettingsDialog({ onClose }: Props) {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<string | null>(null)
   const { toast } = useToast()
+
+  // AI feature toggles — read from localStorage, default enabled
+  const [aiToggles, setAIToggles] = useState<Record<AIFeatureKey, boolean>>(() => ({
+    [AI_FEATURE_KEYS.suggestedQuestions]: isFeatureEnabled(AI_FEATURE_KEYS.suggestedQuestions),
+    [AI_FEATURE_KEYS.autoSummaries]: isFeatureEnabled(AI_FEATURE_KEYS.autoSummaries),
+    [AI_FEATURE_KEYS.smartTitles]: isFeatureEnabled(AI_FEATURE_KEYS.smartTitles),
+  }))
+
+  function toggleAI(key: AIFeatureKey, value: boolean) {
+    setAIToggles((prev) => ({ ...prev, [key]: value }))
+    setFeatureEnabled(key, value)
+  }
 
   function save() {
     localStorage.setItem("llm_base_url", llmUrl)
@@ -113,6 +157,38 @@ export default function SettingsDialog({ onClose }: Props) {
                 <input value={embedModel} onChange={(e) => setEmbedModel(e.target.value)}
                   className="input-field text-apple-fine mt-1" placeholder="text-embedding-3-small" />
               </div>
+            </div>
+          </fieldset>
+
+          <fieldset className="border border-hairline p-4" style={{ borderRadius: 12 }}>
+            <legend className="text-apple-fine font-semibold text-ink-secondary px-1">
+              AI 功能
+            </legend>
+            <p className="text-apple-fine text-ink-secondary mb-3">
+              启用或禁用消耗 LLM token 的 AI 功能。修改即时生效，无需保存。
+            </p>
+            <div className="space-y-3">
+              {([AI_FEATURE_KEYS.suggestedQuestions, AI_FEATURE_KEYS.autoSummaries, AI_FEATURE_KEYS.smartTitles] as AIFeatureKey[]).map((key) => (
+                <div key={key} className="flex items-start justify-between gap-3 py-2 border-b border-hairline-soft last:border-0">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-apple-caption text-ink font-medium">
+                        {AI_FEATURE_LABELS[key]}
+                      </span>
+                      <span className="text-apple-fine text-ink-secondary/60">
+                        {AI_FEATURE_TOKEN_COST[key]}
+                      </span>
+                    </div>
+                    <p className="text-apple-fine text-ink-secondary mt-0.5">
+                      {AI_FEATURE_DESCRIPTIONS[key]}
+                    </p>
+                  </div>
+                  <ToggleSwitch
+                    enabled={aiToggles[key]}
+                    onChange={(v) => toggleAI(key, v)}
+                  />
+                </div>
+              ))}
             </div>
           </fieldset>
 
