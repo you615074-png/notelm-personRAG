@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 import logging
 from datetime import datetime, timezone
 
@@ -15,6 +16,7 @@ from app.models.schemas import (
     ConversationSyncRequest,
     SuggestedQuestionsRequest,
     SuggestedQuestionsResponse,
+    UpdateConversationTitleRequest,
 )
 from app.services.rag import generate_answer, generate_answer_stream
 from app.config import get_settings
@@ -26,6 +28,9 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 settings = get_settings()
 CONVERSATIONS_DIR = os.path.join(settings.data_dir, "conversations")
 os.makedirs(CONVERSATIONS_DIR, exist_ok=True)
+
+CONV_META_DIR = os.path.join(settings.data_dir, "conversations_meta")
+os.makedirs(CONV_META_DIR, exist_ok=True)
 
 
 def _load_conversations(notebook_id: str) -> list[dict]:
@@ -40,6 +45,33 @@ def _save_conversations(notebook_id: str, messages: list[dict]):
     conv_file = os.path.join(CONVERSATIONS_DIR, f"{notebook_id}.json")
     with open(conv_file, "w", encoding="utf-8") as f:
         json.dump(messages, f, indent=2, ensure_ascii=False)
+
+
+def _load_conv_meta(notebook_id: str) -> dict:
+    """Load conversation metadata for a notebook."""
+    meta_file = os.path.join(CONV_META_DIR, f"{notebook_id}.json")
+    if not os.path.exists(meta_file):
+        return {"conversations": {}}
+    with open(meta_file, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _save_conv_meta(notebook_id: str, meta: dict):
+    """Save conversation metadata for a notebook."""
+    meta_file = os.path.join(CONV_META_DIR, f"{notebook_id}.json")
+    with open(meta_file, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2, ensure_ascii=False)
+
+
+def _generate_title(text: str, max_chars: int = 50) -> str:
+    """Generate a conversation title via smart truncation at a word boundary."""
+    if len(text) <= max_chars:
+        return text
+    truncated = text[:max_chars]
+    last_space = truncated.rfind(" ")
+    if last_space > 0:
+        return truncated[:last_space] + "…"
+    return truncated + "…"
 
 
 def _get_notebook_name(notebook_id: str) -> str:
@@ -215,12 +247,36 @@ async def chat_stream(body: ChatRequest):
 
 @router.post("/sync")
 async def sync_conversation(body: ConversationSyncRequest):
-    """Save conversation messages from the frontend to server-side storage."""
+    """Save conversation messages from the frontend to server-side storage.
+
+    Auto-generates a conversation title from the first user message when no
+    conversation metadata exists yet for this notebook.
+    """
     if not _notebook_exists(body.notebook_id):
         raise HTTPException(status_code=404, detail="Notebook not found")
     messages_data = [m.model_dump() for m in body.messages]
     _save_conversations(body.notebook_id, messages_data)
-    return {"ok": True, "message_count": len(messages_data)}
+
+    # Auto-generate conversation title from first user message
+    conv_meta = _load_conv_meta(body.notebook_id)
+    if not conv_meta.get("conversations"):
+        first_user_msg = next(
+            (m for m in messages_data if m.get("role") == "user"), None
+        )
+        if first_user_msg:
+            conv_id = str(uuid.uuid4())
+            conv_meta["conversations"][conv_id] = {
+                "title": _generate_title(first_user_msg["content"]),
+                "pinned": False,
+                "created_at": _now(),
+            }
+            _save_conv_meta(body.notebook_id, conv_meta)
+
+    return {
+        "ok": True,
+        "message_count": len(messages_data),
+        "conversations": list(conv_meta.get("conversations", {}).values()),
+    }
 
 
 @router.get("/export/{notebook_id}")
@@ -295,3 +351,23 @@ async def export_conversation(notebook_id: str):
         media_type="text/markdown",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# Separate router for conversation metadata endpoints (under /api/notebooks prefix)
+conv_router = APIRouter(prefix="/api/notebooks", tags=["conversations"])
+
+
+@conv_router.patch("/{notebook_id}/conversation/{conv_id}/title")
+async def update_conversation_title(
+    notebook_id: str, conv_id: str, body: UpdateConversationTitleRequest
+):
+    """Manually edit a conversation's auto-generated title."""
+    if not _notebook_exists(notebook_id):
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    meta = _load_conv_meta(notebook_id)
+    conversations = meta.get("conversations", {})
+    if conv_id not in conversations:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversations[conv_id]["title"] = body.title
+    _save_conv_meta(notebook_id, meta)
+    return {"ok": True}

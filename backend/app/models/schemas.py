@@ -132,3 +132,14 @@ class NotebookSummaryResponse(BaseModel):
     notebook_id: str
     summary: str
     cached: bool
+
+
+class UpdateConversationTitleRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+
+
+class ConversationMeta(BaseModel):
+    id: str
+    title: str
+    pinned: bool = False
+    created_at: str

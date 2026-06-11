@@ -45,3 +45,10 @@ export interface Note {
   created_at: string
   updated_at: string
 }
+
+export interface ConversationMeta {
+  id: string
+  title: string
+  pinned: boolean
+  created_at: string
+}

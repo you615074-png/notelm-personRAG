@@ -122,7 +122,7 @@
                                                        "Returns proper error when not found (404)"
                                                    ],
                             "priority":  8,
-                            "passes":  false,
+                            "passes":  true,
                             "notes":  ""
                         },
                         {
@@ -137,7 +137,7 @@
                                                        "Backend starts without errors"
                                                    ],
                             "priority":  9,
-                            "passes":  false,
+                            "passes":  true,
                             "notes":  ""
                         },
                         {

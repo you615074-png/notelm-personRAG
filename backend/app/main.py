@@ -34,6 +34,7 @@ async def startup():
 app.include_router(notebooks.router)
 app.include_router(documents.router)
 app.include_router(chat.router)
+app.include_router(chat.conv_router)
 app.include_router(search.router)
 app.include_router(summaries.router)
 
